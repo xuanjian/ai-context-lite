@@ -54,6 +54,71 @@ devflow init --dir ~/.local/share/devflow
 
 安装后，在 AI 工具里运行 `devflow-init`，用对话方式生成本机私有 profile、项目清单、场景模板、规则和技能。
 
+### 可选依赖（按需，缺省安全）
+
+DevFlow 本身不依赖它们；**不装也能正常用**，只是大任务会自动跳过对应能力，不报错、不阻塞。
+
+- **OpenSpec**——规格驱动的真相源，给 L3/L4 或有 PRD/工单/设计输入的大任务用：
+
+  ```bash
+  npm install -g @fission-ai/openspec@latest   # 可选
+  ```
+
+  不想要可以跳过：`devflow init --skip-openspec`。没装时 `devflow doctor` 只警告不报错，full 任务自动跳过规格层。
+
+- **superpowers**——执行纪律技能（头脑风暴、写计划、TDD、调试、验证等）。把 superpowers 的技能目录放/链接到 AI 工具的技能目录后，注册进 DevFlow：
+
+  ```bash
+  devflow add skill <superpowers-root> --family superpowers --scope global   # 可选
+  ```
+
+  注册只是让这些技能「**可被检索**」，**不会默认加载**；只有当任务真正需要某条纪律时，路由才会把对应技能带出来。
+
+## 真实开发流程（站在用户角度）
+
+装好之后，日常开发你**不需要手动选项目、选场景、写 `AGENTS.md`**。流程是这样的：
+
+### 一次性：登记你的项目和能力
+
+```text
+@devflow:init                                 # 首次：生成本机 profile
+@devflow:add /path/to/your-project            # 登记每个常用项目
+@devflow:add rule bff/error-handling          # 可选：登记团队规则
+@devflow:add skill <superpowers-root> --family superpowers --scope global   # 可选
+```
+
+### 日常：开一个 AI 对话，直接说需求
+
+直接说「给订货宝加订单导出功能」「修一下库存打印数量口径」这种话。DevFlow 会先**按需判断任务大小**，只加载必要上下文：
+
+| 任务大小 | DevFlow 怎么做 | 用 OpenSpec / superpowers 吗 |
+|----------|----------------|------------------------------|
+| 查代码 / 普通问答 | 直接答，不读 DevFlow | 不用 |
+| 小 bug / 小改动 | 轻量记录，能跨对话恢复 | 一般不用 |
+| 大需求 / 跨前后端 / 有 PRD·工单·设计 | 建可恢复任务，走 G1-G7 | 大任务才可选启用 |
+
+### 大任务：跟着 G1-G7 走，每步交接给下一步
+
+1. **G1 意图**：AI 用选项式问你（任务类型？优先目标？边界？要不要走 OpenSpec？），你选 `1/2/3` 或改写。
+2. **G2 调研**：找相关项目、接口、约束、未知项（装了 superpowers 可拉「头脑风暴」纪律）。
+3. **G3 方案/UI**：出技术方案或交互原型；大任务可写 OpenSpec proposal（装了 superpowers 可拉「写计划」纪律）。
+4. **G4 开发**：按「先 BFF 接口 → 再前端页面 → 最后原生对接」的顺序写码（可拉 TDD 纪律）。
+5. **G5 联调**：单项目跑通、跨项目联调、环境切换。
+6. **G6 验收**：对照需求、接口、diff、（如选用）OpenSpec spec 验收。
+7. **G7 运行/归档**：打包、最终验证、（如选用）`openspec archive` 把规格合并回主线、复盘。
+
+### 关了对话也能继续，还能换工具接力
+
+任务状态存在 DevFlow 里（不在某个对话里）。换新对话说「继续当前任务」，或在任何工具里跑：
+
+```bash
+devflow query current
+```
+
+就能恢复目标、当前步骤、下一步和恢复点。**这就是为什么可以「Claude Code 出方案、Codex 接手实现」**——两边读的是同一套本地状态。
+
+> 真实例子：这次「把 OpenSpec + superpowers 集成进 DevFlow」就是 Claude Code 出方案 + 建任务，Codex 分 M1/M2/M3 接手实现，全程靠 `devflow query current` 跨工具接力完成的。
+
 ## 聊天入口
 
 ```text
@@ -61,6 +126,7 @@ devflow init --dir ~/.local/share/devflow
 @devflow:add /path/to/project
 @devflow:add scene-template 前后端联调
 @devflow:add skill /path/to/skill
+@devflow:add skill /path/to/superpowers --family superpowers --scope global
 @devflow:add rule bff/error-handling
 @devflow:del project old-project
 @devflow:del skill old-skill
