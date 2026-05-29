@@ -8,6 +8,36 @@
   "sceneIds": [
     "demo-scene"
   ],
+  "workset": {
+    "id": "workset-demo-task",
+    "taskId": "demo-task",
+    "sourceText": "Demo Task",
+    "confidence": "high",
+    "reason": "Matched demo project and demo scene template fixture metadata.",
+    "sceneTemplateId": "demo-scene",
+    "capabilities": [
+      {
+        "id": "task-routing",
+        "role": "primary"
+      }
+    ],
+    "projects": [
+      {
+        "id": "demo-project",
+        "role": "primary"
+      }
+    ],
+    "skills": [
+      {
+        "id": "demo-skill"
+      }
+    ],
+    "rules": [
+      {
+        "id": "demo-rule"
+      }
+    ]
+  },
   "currentGate": "G1",
   "status": "in_progress",
   "gates": [

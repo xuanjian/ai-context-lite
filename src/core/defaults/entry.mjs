@@ -1,0 +1,168 @@
+export const ENTRY_CONFIG_KEY = "entry";
+
+// Mirrored from config/entry.json. JSON file will be removed after devflow migrate from-json (Round 2).
+export const DEFAULT_ENTRY = {
+  "version": 1,
+  "name": "DevFlow entry",
+  "purpose": "Stable portable AI entrypoint. Use devflow query route/current/skills/rules first, then load source markdown/rules/skills only when selected by query results. Do not rely on home-level compatibility files.",
+  "workflowOrder": [
+    "Use devflow query current for resume/current-task requests.",
+    "Use devflow-init after install to collect local profile, projects, scenes, skills, and rules.",
+    "For L3/L4 work or requests backed by Jira, Notion, Figma, PRD, or cross-project acceptance criteria, use OpenSpec as the optional spec-driven source of truth before implementation; do not load it for small L1/L2 edits unless already selected.",
+    "Carry forward each gate's concrete output as the input to the next gate: intake informs discovery, discovery informs plan/spec, plan/spec informs implementation, implementation evidence informs integration, integration evidence informs acceptance, and acceptance informs run/archive.",
+    "Use devflow query route to select only the context needed for the current task.",
+    "When work should survive the chat, create or update task state with devflow task start/update/finish before implementation."
+  ],
+  "defaultReadOrder": [
+    "devflow query current for resume/current-task requests",
+    "devflow query route \"<user request>\" for project, task, scene, Workset, or panel routing",
+    "devflow query skills only when skill selection is needed",
+    "devflow query rules only when rule lookup is needed",
+    "readPaths, skills.sourcePath, and rules.sourcePath returned by query results only when selected",
+    "bundles/skills/devflow-init/SKILL.md when the user is onboarding or initializing DevFlow"
+  ],
+  "routingDecision": {
+    "projectsIndex": "Run devflow query route \"<user request>\" to get candidate projects, scores, Workset, and selected readPaths.",
+    "projectDetail": "After query selects a project, load only returned readPaths and any selected skills.sourcePath or rules.sourcePath.",
+    "scenesIndex": "Use devflow query route when the task may involve a workflow scene or multiple projects.",
+    "sceneDetail": "After query selects a scene, use the returned scene template, Workset, readPaths, and rule source paths.",
+    "fallback": "If no project or scene is clear, ask one concise clarification instead of reading all source documents."
+  },
+  "sourceReadPolicy": {
+    "homeCompatibility": "Do not read or require home-level compatibility files by default. Treat this repository entry and DevFlow query results as the portable source of truth.",
+    "projectDocs": "Read the selected project's distributed entry file, usually <project>/.ai-configs/project.md, only when query results return it or the project summary is insufficient.",
+    "scenes": "Read docs/scenes/*.md only when query results select a scene and detailed workflow text is needed.",
+    "rules": "Run devflow query rules for rule inventory. Active rule sources under bundles/rules/** are loaded only when selected by query results, project, scene, or task gate.",
+    "skills": "Run devflow query skills for skill inventory. Active bundles/skills/** are loaded only when query results, task state, or an explicit user request triggers the skill.",
+    "openspec": "Read or create OpenSpec only when the task is L3/L4, has explicit Jira/Notion/Figma/PRD/spec input, crosses projects/devices, or needs durable acceptance criteria. Store only the OpenSpec change id, path, status, and handoff summary in task state.",
+    "profile": "A fresh install has no long profile. Run devflow-init to create local profile details."
+  },
+  "installation": {
+    "script": "scripts/install-ai-context.mjs",
+    "commands": [
+      "devflow init",
+      "devflow init --tools codex,claude-code,cursor",
+      "devflow init --skip-openspec",
+      "setup",
+      "setup --install-openspec",
+      "doctor",
+      "install",
+      "install --project-skills",
+      "check",
+      "uninstall",
+      "sync-projects",
+      "sync-projects --write",
+      "sync-projects --project <project-id> --write",
+      "sync-projects --project <project-id> --skills-only --write",
+      "validate"
+    ],
+    "primaryInstallFlow": [
+      "npm install -g @xuanmimi/devflow --registry=https://registry.npmjs.org/",
+      "devflow init",
+      "ask the AI tool to run devflow-init"
+    ],
+    "workflowDependencies": [
+      {
+        "id": "openspec",
+        "optional": true,
+        "purpose": "Optional spec-driven source of truth for L3/L4, Jira/Notion/Figma/PRD-backed, cross-project, cross-device, or high-risk tasks.",
+        "install": "npm install -g @fission-ai/openspec@latest",
+        "verify": "openspec --version",
+        "missingBehavior": "Warn only; DevFlow continues and full tasks skip the spec layer unless OpenSpec is selected and available."
+      },
+      {
+        "id": "superpowers",
+        "optional": true,
+        "purpose": "Optional execution discipline layer for brainstorming, TDD, debugging, planning, verification, review, and branch finishing.",
+        "install": "Place or link superpowers skill directories into the selected AI tool skill home, then register them with `devflow add skill <superpowers-root> --family superpowers --scope global`.",
+        "verify": "devflow query skills shows registered superpowers skills, or the selected skill home contains superpowers skill directories with SKILL.md files.",
+        "missingBehavior": "Warn only; DevFlow continues and skips superpowers routing when no matching global skills are registered."
+      }
+    ],
+    "skillLinks": [
+      "~/.codex/skills/<skill> for Codex",
+      "~/.claude/skills/<skill> for Claude Code",
+      "~/.cursor/skills/<skill> for Cursor",
+      "~/.qoderwork/skills/<skill> for QoderWork",
+      "~/.opencode/skills/<skill> for OpenCode",
+      "~/.workbuddy/skills/<skill> for WorkBuddy"
+    ],
+    "globalEntrypoints": [],
+    "globalEntrypointsStatus": "deprecated; do not create home-level AGENTS.md, CLAUDE.md, or WORK_CONTEXT.md by default",
+    "projectEntrypoints": [
+      "AGENTS.md",
+      "CLAUDE.md",
+      ".ai-configs/claude.md",
+      ".claude/CLAUDE.md",
+      ".cursor/rules/00-devflow.mdc"
+    ],
+    "legacyProjectEntrypointsToPrune": [
+      "claude.md"
+    ],
+    "afterInstall": "Ask the AI tool to run the devflow-init skill to initialize profile, projects, scenes, skills, and rules.",
+    "cli": {
+      "bin": "devflow",
+      "package": "@xuanmimi/devflow",
+      "initCommand": "devflow init",
+      "nonInteractiveExample": "devflow init --tools codex,claude-code,cursor",
+      "supportedTools": [
+        "codex",
+        "claude-code",
+        "cursor",
+        "qoderwork",
+        "opencode",
+        "workbuddy"
+      ],
+      "internalScriptStatus": "setup and doctor are retained for tests, CI, and low-level troubleshooting only; normal users should run devflow init.",
+      "createsLocalCheckout": "When run outside an existing devflow checkout, devflow init creates ./devflow from the npm package template. Use --dir <path> to choose another location."
+    }
+  },
+  "taskFlow": {
+    "currentPointer": "runtime/current.json",
+    "activeTaskPattern": "runtime/tasks/<task-id>.json",
+    "gatesPath": "config/tasks/gates.json",
+    "defaultBehavior": "Fresh install has no active task. Create task JSON only when the user starts work that should survive the chat.",
+    "commands": [
+      "devflow task start \"<title>\" --project <id> --template <scene-template-id> --gate G1 --level <L1-L4>",
+      "devflow task update <task-id> --gate <G1-G7> --note \"<progress or decision>\"",
+      "devflow task finish <task-id> --note \"<verification and handoff>\""
+    ],
+    "specLayer": {
+      "tool": "OpenSpec",
+      "defaultUse": "optional for L3/L4 and explicit spec-backed work; skipped for routine L1/L2 edits",
+      "taskJsonFields": [
+        "spec.tool",
+        "spec.changeId",
+        "spec.path",
+        "spec.status",
+        "spec.handoff"
+      ],
+      "statusValues": [
+        "none",
+        "proposed",
+        "approved",
+        "applied",
+        "verified",
+        "archived"
+      ],
+      "archivePolicy": "At G7, completed OpenSpec changes should be synced or archived so delta specs merge into openspec/specs/ and the completed change moves to openspec/changes/archive/. Record lessons learned as a compact task note or follow-up artifact before archive when they should influence future work."
+    },
+    "handoffPolicy": "Every gate should leave a compact artifact or note that the next gate consumes. Do not add gstack or ce as default tools; only borrow the handoff discipline of feeding each stage's output into the next stage.",
+    "gates": [
+      "G1",
+      "G2",
+      "G3",
+      "G4",
+      "G5",
+      "G6",
+      "G7"
+    ]
+  },
+  "indexes": {
+    "profile": "config/profile.json",
+    "projects": "config/projects/index.json",
+    "scenes": "config/scenes/index.json",
+    "skills": "config/skills/skills.json",
+    "rules": "config/rules/rules.json"
+  }
+};

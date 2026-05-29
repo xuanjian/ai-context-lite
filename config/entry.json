@@ -1,42 +1,37 @@
 {
   "version": 1,
   "name": "DevFlow entry",
-  "purpose": "Stable portable AI entrypoint. Read this repository JSON indexes first, then load source markdown/rules/skills only when selected by task context. Do not rely on home-level compatibility files.",
+  "purpose": "Stable portable AI entrypoint. Use devflow query route/current/skills/rules first, then load source markdown/rules/skills only when selected by query results. Do not rely on home-level compatibility files.",
   "workflowOrder": [
-    "Read entry/profile/current JSON first.",
+    "Use devflow query current for resume/current-task requests.",
     "Use devflow-init after install to collect local profile, projects, scenes, skills, and rules.",
     "For L3/L4 work or requests backed by Jira, Notion, Figma, PRD, or cross-project acceptance criteria, use OpenSpec as the optional spec-driven source of truth before implementation; do not load it for small L1/L2 edits unless already selected.",
     "Carry forward each gate's concrete output as the input to the next gate: intake informs discovery, discovery informs plan/spec, plan/spec informs implementation, implementation evidence informs integration, integration evidence informs acceptance, and acceptance informs run/archive.",
-    "Use project and scene indexes to select only the context needed for the current task.",
-    "When work should survive the chat, create or update runtime task state with contextctl task start/update/finish before implementation.",
-    "When a task is active, every AI-generated document from chat, OpenSpec, superpowers, or project work must be copied or written under runtime/tasks/<task-id>/<G1-G7>/ and registered in that gate's artifacts."
+    "Use devflow query route to select only the context needed for the current task.",
+    "When work should survive the chat, create or update task state with devflow task start/update/finish before implementation."
   ],
   "defaultReadOrder": [
-    "config/entry.json",
-    "config/profile.json",
-    "runtime/current.json",
-    "config/projects/index.json",
-    "matched config/projects/<project-id>.json",
-    "config/scenes/index.json",
-    "matched config/scenes/<scene-id>.json",
-    "config/skills/skills.json only when skill selection is needed",
-    "config/rules/rules.json only when rule lookup is needed",
+    "devflow query current for resume/current-task requests",
+    "devflow query route \"<user request>\" for project, task, scene, Workset, or panel routing",
+    "devflow query skills only when skill selection is needed",
+    "devflow query rules only when rule lookup is needed",
+    "readPaths, skills.sourcePath, and rules.sourcePath returned by query results only when selected",
     "bundles/skills/devflow-init/SKILL.md when the user is onboarding or initializing DevFlow"
   ],
   "routingDecision": {
-    "projectsIndex": "Read config/projects/index.json first as the candidate list. Use id, name, technologyFamilyId, path, and summary to choose matched project JSON files.",
-    "projectDetail": "After selecting a project, read config/projects/<project-id>.json for doc path, mounted skills, scenes, rules, and source read policy.",
-    "scenesIndex": "Read config/scenes/index.json as the candidate list when the task may involve a workflow scene or multiple projects.",
-    "sceneDetail": "After selecting a scene, read config/scenes/<scene-id>.json for included projects, mounted scene rules, composition reason, run/debug notes, and source scene doc path.",
+    "projectsIndex": "Run devflow query route \"<user request>\" to get candidate projects, scores, Workset, and selected readPaths.",
+    "projectDetail": "After query selects a project, load only returned readPaths and any selected skills.sourcePath or rules.sourcePath.",
+    "scenesIndex": "Use devflow query route when the task may involve a workflow scene or multiple projects.",
+    "sceneDetail": "After query selects a scene, use the returned scene template, Workset, readPaths, and rule source paths.",
     "fallback": "If no project or scene is clear, ask one concise clarification instead of reading all source documents."
   },
   "sourceReadPolicy": {
-    "homeCompatibility": "Do not read or require home-level compatibility files by default. Treat this repository entry and JSON indexes as the portable source of truth.",
-    "projectDocs": "Read the selected business project's .ai-configs/project.md only after its project JSON is selected and the summary is insufficient.",
-    "scenes": "Read docs/scenes/*.md only after a scene JSON is selected and detailed workflow text is needed.",
-    "rules": "Read config/rules/rules.json first. Common rule sources under bundles/rules/** and project-local .ai-configs/rules/** are loaded only when selected by project, scene, or task gate.",
-    "skills": "Read active bundles/skills/** only when task state, project JSON, or an explicit user request triggers the skill.",
-    "openspec": "Read or create OpenSpec only when the task is L3/L4, has explicit Jira/Notion/Figma/PRD/spec input, crosses projects/devices, or needs durable acceptance criteria. Store only the OpenSpec change id, path, status, and handoff summary in task JSON.",
+    "homeCompatibility": "Do not read or require home-level compatibility files by default. Treat this repository entry and DevFlow query results as the portable source of truth.",
+    "projectDocs": "Read the selected project's distributed entry file, usually <project>/.ai-configs/project.md, only when query results return it or the project summary is insufficient.",
+    "scenes": "Read docs/scenes/*.md only when query results select a scene and detailed workflow text is needed.",
+    "rules": "Run devflow query rules for rule inventory. Active rule sources under bundles/rules/** are loaded only when selected by query results, project, scene, or task gate.",
+    "skills": "Run devflow query skills for skill inventory. Active bundles/skills/** are loaded only when query results, task state, or an explicit user request triggers the skill.",
+    "openspec": "Read or create OpenSpec only when the task is L3/L4, has explicit Jira/Notion/Figma/PRD/spec input, crosses projects/devices, or needs durable acceptance criteria. Store only the OpenSpec change id, path, status, and handoff summary in task state.",
     "profile": "A fresh install has no long profile. Run devflow-init to create local profile details."
   },
   "installation": {
@@ -66,14 +61,19 @@
     "workflowDependencies": [
       {
         "id": "openspec",
+        "optional": true,
         "purpose": "Optional spec-driven source of truth for L3/L4, Jira/Notion/Figma/PRD-backed, cross-project, cross-device, or high-risk tasks.",
         "install": "npm install -g @fission-ai/openspec@latest",
-        "verify": "openspec --version"
+        "verify": "openspec --version",
+        "missingBehavior": "Warn only; DevFlow continues and full tasks skip the spec layer unless OpenSpec is selected and available."
       },
       {
         "id": "superpowers",
-        "purpose": "Execution discipline layer for brainstorming, TDD, debugging, planning, verification, review, and branch finishing.",
-        "verify": "~/.codex/superpowers exists"
+        "optional": true,
+        "purpose": "Optional execution discipline layer for brainstorming, TDD, debugging, planning, verification, review, and branch finishing.",
+        "install": "Place or link superpowers skill directories into the selected AI tool skill home, then register them with `devflow add skill <superpowers-root> --family superpowers --scope global`.",
+        "verify": "devflow query skills shows registered superpowers skills, or the selected skill home contains superpowers skill directories with SKILL.md files.",
+        "missingBehavior": "Warn only; DevFlow continues and skips superpowers routing when no matching global skills are registered."
       }
     ],
     "skillLinks": [
@@ -117,14 +117,12 @@
   "taskFlow": {
     "currentPointer": "runtime/current.json",
     "activeTaskPattern": "runtime/tasks/<task-id>.json",
-    "activeTaskWorkspacePattern": "runtime/tasks/<task-id>/<G1-G7>/",
     "gatesPath": "config/tasks/gates.json",
     "defaultBehavior": "Fresh install has no active task. Create task JSON only when the user starts work that should survive the chat.",
     "commands": [
-      "node scripts/contextctl.mjs task start \"<title>\" --projects <ids> --scenes <ids> --gate G1 --level <L1-L4>",
-      "node scripts/contextctl.mjs task update [task-id] --gate <G1-G7> --note \"<progress or decision>\"",
-      "node scripts/contextctl.mjs task artifact [task-id] --gate <G1-G7> --file <generated-doc-path> --note \"<why this artifact matters>\"",
-      "node scripts/contextctl.mjs task finish [task-id] --note \"<verification and handoff>\""
+      "devflow task start \"<title>\" --project <id> --template <scene-template-id> --gate G1 --level <L1-L4>",
+      "devflow task update <task-id> --gate <G1-G7> --note \"<progress or decision>\"",
+      "devflow task finish <task-id> --note \"<verification and handoff>\""
     ],
     "specLayer": {
       "tool": "OpenSpec",
@@ -146,13 +144,7 @@
       ],
       "archivePolicy": "At G7, completed OpenSpec changes should be synced or archived so delta specs merge into openspec/specs/ and the completed change moves to openspec/changes/archive/. Record lessons learned as a compact task note or follow-up artifact before archive when they should influence future work."
     },
-    "handoffPolicy": "Every gate should leave a compact artifact or note that the next gate consumes. AI-generated documents must be stored in the task workspace under the matching gate directory and registered in gates[].artifacts. Do not add gstack or ce as default tools; only borrow the handoff discipline of feeding each stage's output into the next stage.",
-    "artifactPolicy": {
-      "required": true,
-      "rule": "If chat, OpenSpec, superpowers, or implementation work creates a document for this task, copy or write it to runtime/tasks/<task-id>/<gate>/ and register it in that gate's artifacts.",
-      "allowedOriginals": "The original project/OpenSpec/superpower file may remain in its native location, but the task workspace copy is the durable task artifact.",
-      "command": "node scripts/contextctl.mjs task artifact [task-id] --gate <G1-G7> --file <generated-doc-path>"
-    },
+    "handoffPolicy": "Every gate should leave a compact artifact or note that the next gate consumes. Do not add gstack or ce as default tools; only borrow the handoff discipline of feeding each stage's output into the next stage.",
     "gates": [
       "G1",
       "G2",

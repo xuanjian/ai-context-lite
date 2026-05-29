@@ -1,8 +1,11 @@
 {
   "name": "@xuanmimi/devflow",
-  "version": "0.1.4",
+  "version": "0.1.3",
   "private": false,
   "type": "module",
+  "workspaces": [
+    "apps/panel"
+  ],
   "bin": {
     "devflow": "scripts/devflow-cli.mjs"
   },
@@ -16,46 +19,24 @@
     "bundles/README.md",
     "bundles/skills/devflow",
     "bundles/skills/devflow-init",
-    "config/entry.json",
-    "config/profile.json",
-    "config/projects/devflow.json",
-    "config/projects/index.json",
-    "config/rules/rules.json",
-    "config/scenes/devflow-config.json",
-    "config/scenes/index.json",
-    "config/skills/skills.json",
-    "config/tasks/gates.json",
     "docs/README.md",
     "docs/install.md",
     "docs/project-introduction.md",
-    "runtime/current.json",
-    "runtime/tasks/.gitkeep",
-    "scripts/contextctl.mjs",
+    "apps/panel",
     "scripts/devflow-cli.mjs",
     "scripts/generate-adapters.mjs",
     "scripts/install-ai-context.mjs",
     "src"
   ],
   "scripts": {
-    "dev": "vite src/app --host 127.0.0.1 --config src/app/vite.config.js",
-    "build": "vite build src/app --outDir ../../dist/app --config src/app/vite.config.js",
-    "test": "node --test \"tests/*.test.mjs\" \"tests/**/*.test.mjs\" && vitest run --config src/app/vitest.config.js",
-    "test:core": "node --test \"tests/*.test.mjs\" \"tests/**/*.test.mjs\"",
-    "test:ui": "vitest run --config src/app/vitest.config.js",
+    "dev": "npm --workspace @xuanmimi/devflow-panel run dev",
+    "build": "npm --workspace @xuanmimi/devflow-panel run build",
+    "test": "node --test \"tests/**/*.test.mjs\" && npm run test:ui",
+    "test:core": "node --test \"tests/**/*.test.mjs\"",
+    "test:ui": "npm --workspace @xuanmimi/devflow-panel test",
     "start": "node src/server.mjs"
   },
   "dependencies": {
-    "lucide-react": "latest",
-    "react": "latest",
-    "react-dom": "latest"
-  },
-  "devDependencies": {
-    "@testing-library/jest-dom": "latest",
-    "@testing-library/react": "latest",
-    "@testing-library/user-event": "latest",
-    "@vitejs/plugin-react": "latest",
-    "jsdom": "latest",
-    "vite": "latest",
-    "vitest": "latest"
+    "better-sqlite3": "^12.10.0"
   }
 }

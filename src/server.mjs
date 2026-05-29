@@ -3,11 +3,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { renderBootstrapPage } from "./bootstrap/page.mjs";
-import { runAction } from "./core/actions.mjs";
-import { runChecks } from "./core/checks.mjs";
-import { buildContextGraph, getNodeDetails } from "./core/graph.mjs";
 import { readJsonFile } from "./core/json-loader.mjs";
 import { resolveInside, toPath } from "./core/paths.mjs";
+import { createDevFlowService } from "./core/services/devflow-service.mjs";
 
 const DEFAULT_HOST = "127.0.0.1";
 const MIME_TYPES = {
@@ -18,10 +16,11 @@ const MIME_TYPES = {
   ".json": "application/json; charset=utf-8"
 };
 
-export async function startServer({ rootDir = process.cwd(), port = 0, host = DEFAULT_HOST } = {}) {
+export async function startServer({ rootDir = process.cwd(), port = 0, host = DEFAULT_HOST, service } = {}) {
   const rootPath = toPath(rootDir);
+  const devflowService = service || createDevFlowService({ rootDir: rootPath });
   const server = http.createServer((request, response) => {
-    handleRequest({ request, response, rootPath }).catch((error) => {
+    handleRequest({ request, response, rootPath, service: devflowService }).catch((error) => {
       sendJson(response, 500, { error: { code: "server_error", message: error.message } });
     });
   });
@@ -35,46 +34,54 @@ export async function startServer({ rootDir = process.cwd(), port = 0, host = DE
   };
 }
 
-export async function handleApiRequest({ request, response, rootDir = process.cwd() }) {
+export async function handleApiRequest({ request, response, rootDir = process.cwd(), service } = {}) {
   const rootPath = toPath(rootDir);
+  const devflowService = service || createDevFlowService({ rootDir: rootPath });
   const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
   if (!url.pathname.startsWith("/api/")) {
     return false;
   }
-  await handleApiRoute({ request, response, rootPath, url });
+  await handleApiRoute({ request, response, rootPath, url, service: devflowService });
   return true;
 }
 
-async function handleRequest({ request, response, rootPath }) {
+async function handleRequest({ request, response, rootPath, service }) {
   const url = new URL(request.url, `http://${request.headers.host || "localhost"}`);
 
   if (url.pathname.startsWith("/api/")) {
-    return handleApiRoute({ request, response, rootPath, url });
+    return handleApiRoute({ request, response, rootPath, url, service });
   }
 
   if (request.method !== "GET") {
     return sendJson(response, 405, { error: { code: "method_not_allowed", message: "Only GET is supported." } });
   }
 
-  return serveAppOrBootstrap(response, rootPath, url.pathname);
+  return serveAppOrBootstrap(response, rootPath, url.pathname, service);
 }
 
-async function handleApiRoute({ request, response, rootPath, url }) {
+async function handleApiRoute({ request, response, rootPath, url, service }) {
   if (url.pathname === "/api/graph" && request.method === "GET") {
-    return sendJson(response, 200, await buildContextGraph({ rootDir: rootPath }));
+    return sendJson(response, 200, await service.buildContextGraph());
   }
 
   if (url.pathname.startsWith("/api/nodes/") && request.method === "GET") {
-    const graph = await buildContextGraph({ rootDir: rootPath });
     const nodeId = decodeURIComponent(url.pathname.slice("/api/nodes/".length));
-    const details = getNodeDetails(graph, nodeId);
+    const details = await service.getNodeDetails(nodeId);
     return details
-      ? sendJson(response, 200, { ...details, documentPreview: await readNodeDocumentPreview(rootPath, details.node) })
+      ? sendJson(response, 200, details)
       : sendJson(response, 404, { error: { code: "unknown_node", message: `Unknown node: ${nodeId}` } });
   }
 
+  if (url.pathname.startsWith("/api/artifacts/") && request.method === "GET") {
+    const nodeId = decodeURIComponent(url.pathname.slice("/api/artifacts/".length));
+    const details = await service.getNodeDetails(nodeId);
+    return details?.node?.type === "artifact"
+      ? serveArtifactDocument(response, rootPath, details.node)
+      : sendJson(response, 404, { error: { code: "unknown_artifact", message: `Unknown artifact: ${nodeId}` } });
+  }
+
   if (url.pathname === "/api/checks" && request.method === "GET") {
-    return sendJson(response, 200, await runChecks({ rootDir: rootPath, runCommands: false }));
+    return sendJson(response, 200, await service.runChecks({ runCommands: false }));
   }
 
   if (url.pathname === "/api/profile-document" && request.method === "GET") {
@@ -91,11 +98,76 @@ async function handleApiRoute({ request, response, rootPath, url }) {
       return sendJson(response, 400, { error: bodyResult.error });
     }
     const body = bodyResult.data;
-    const result = await runAction({ rootDir: rootPath, actionId, body });
+    const result = await service.runAction({ actionId, body });
     return sendJson(response, result.ok ? 200 : 400, result);
   }
 
   return sendJson(response, 404, { error: { code: "unknown_api_route", message: `Unknown API route: ${url.pathname}` } });
+}
+
+async function serveArtifactDocument(response, rootPath, artifactNode) {
+  const artifactPath = artifactNode.raw?.path || artifactNode.sourcePath || "";
+  if (!artifactPath) {
+    return sendJson(response, 404, { error: { code: "artifact_path_missing", message: "Artifact path is missing." } });
+  }
+  const absolutePath = path.isAbsolute(artifactPath) ? artifactPath : resolveInside(rootPath, artifactPath);
+  try {
+    const content = await fs.readFile(absolutePath, "utf8");
+    const title = artifactNode.title || path.basename(artifactPath);
+    if (isHtmlArtifact(artifactPath)) {
+      response.writeHead(200, { "content-type": MIME_TYPES[".html"] });
+      response.end(content);
+      return;
+    }
+    response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+    response.end(renderArtifactPage({ title, artifactPath, content }));
+  } catch (error) {
+    return sendJson(response, 404, {
+      error: {
+        code: error?.code || "read_artifact_failed",
+        message: error.message,
+        path: artifactPath
+      }
+    });
+  }
+}
+
+function isHtmlArtifact(artifactPath) {
+  return [".html", ".htm"].includes(path.extname(artifactPath).toLowerCase());
+}
+
+function renderArtifactPage({ title, artifactPath, content }) {
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { margin: 0; background: #171717; color: #e6edf3; }
+    header { position: sticky; top: 0; padding: 16px 22px; background: #202020; border-bottom: 1px solid #333; }
+    h1 { margin: 0 0 6px; font-size: 18px; }
+    p { margin: 0; color: #9aa4ad; font-size: 13px; word-break: break-all; }
+    pre { margin: 0; padding: 22px; white-space: pre-wrap; word-break: break-word; line-height: 1.55; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>${escapeHtml(title)}</h1>
+    <p>${escapeHtml(artifactPath)}</p>
+  </header>
+  <pre>${escapeHtml(content)}</pre>
+</body>
+</html>`;
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
 }
 
 async function readProfileDocument(rootPath) {
@@ -123,57 +195,7 @@ async function readProfileDocument(rootPath) {
   }
 }
 
-async function readNodeDocumentPreview(rootPath, node) {
-  const sourcePath = documentPathForNode(node);
-  if (!sourcePath) {
-    return null;
-  }
-  try {
-    const markdown = await fs.readFile(resolveInside(rootPath, sourcePath), "utf8");
-    return {
-      sourcePath,
-      title: documentTitleForNode(node),
-      markdown: trimDocumentPreview(markdown),
-      truncated: markdown.length > 2400
-    };
-  } catch (error) {
-    return {
-      sourcePath,
-      title: documentTitleForNode(node),
-      markdown: "",
-      error: { code: error?.code || "read_document_failed", message: error.message }
-    };
-  }
-}
-
-function documentPathForNode(node) {
-  if (node?.type === "project" || node?.type === "scene" || node?.type === "profile") {
-    return node.docPath || "";
-  }
-  if (node?.type === "skill" || node?.type === "rule") {
-    return node.sourcePath || "";
-  }
-  return "";
-}
-
-function documentTitleForNode(node) {
-  if (node?.type === "project") return "project.md";
-  if (node?.type === "skill") return "SKILL.md";
-  if (node?.type === "rule") return "rule 文档";
-  if (node?.type === "scene") return "scene 文档";
-  if (node?.type === "profile") return "profile 文档";
-  return "文档";
-}
-
-function trimDocumentPreview(markdown) {
-  const normalized = String(markdown || "").trim();
-  if (normalized.length <= 2400) {
-    return normalized;
-  }
-  return `${normalized.slice(0, 2400).trimEnd()}\n...`;
-}
-
-async function serveAppOrBootstrap(response, rootPath, requestPath) {
+async function serveAppOrBootstrap(response, rootPath, requestPath, service) {
   const distPath = path.join(rootPath, "dist/app");
   const normalized = requestPath === "/" ? "/index.html" : requestPath;
   const candidate = path.normalize(normalized).replace(/^(\.\.(\/|\\|$))+/, "");
@@ -197,7 +219,7 @@ async function serveAppOrBootstrap(response, rootPath, requestPath) {
     response.writeHead(200, { "content-type": MIME_TYPES[".html"] });
     response.end(index);
   } catch {
-    const checks = await runChecks({ rootDir: rootPath, runCommands: false });
+    const checks = await service.runChecks({ runCommands: false });
     response.writeHead(200, { "content-type": MIME_TYPES[".html"] });
     response.end(renderBootstrapPage(checks));
   }

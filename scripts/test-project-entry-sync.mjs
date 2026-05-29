@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 
 const root = path.resolve(new URL('..', import.meta.url).pathname);
 const projectRoot = root;
-const managedMarker = 'Read first:\n\n1. config/entry.json';
+const managedMarker = '<!-- devflow:managed-entry:start -->';
 const portableOverrideMarker = 'Do not read or require home-level compatibility files';
 const files = [
   path.join(projectRoot, 'AGENTS.md'),
@@ -63,8 +63,11 @@ try {
   ]) {
     if (!fs.existsSync(file)) throw new Error(`expected generated entry file: ${file}`);
     const content = fs.readFileSync(file, 'utf8');
-    if (!content.includes('config/projects/devflow.json')) {
-      throw new Error(`generated entry does not point at DevFlow project JSON: ${file}`);
+    if (!content.includes('devflow query route "<user request>"')) {
+      throw new Error(`generated entry does not point at DevFlow query route: ${file}`);
+    }
+    if (content.includes('JSON index reading')) {
+      throw new Error(`generated entry still references JSON index reading: ${file}`);
     }
     if (!content.includes(portableOverrideMarker)) {
       throw new Error(`generated entry does not contain portable project override: ${file}`);

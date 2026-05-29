@@ -1,78 +1,37 @@
 # DevFlow
 
-`DevFlow` 是一个给 AI 编程工具使用的本地上下文工作台。它采用 SDD + TDD 的开发模式：用 OpenSpec 承接规格驱动开发，用 superpowers 承接测试驱动和工程执行纪律，再用 DevFlow 把项目路由、任务状态、看板、规则和技能索引串起来。
+`DevFlow` 是给 AI 编程工具使用的本地上下文和任务状态工作台。
 
-它的目标不是把所有资料一次性塞进聊天窗口，而是把项目、场景、技能、规则、规格和任务状态做成可索引的配置，让 AI 按需读取上下文。
+它不负责替代 Codex、Claude Code、Cursor、OpenSpec 或 superpowers。它负责保存项目关系、规则/技能索引、任务状态和恢复点，让 Agent 在需要时只读取最小上下文。
 
-更准确地说，DevFlow 是 AI 开发的本地控制面：
+核心原则：
 
-- 项目地图：登记项目、技术族、仓库路径、项目说明、项目之间的关系和联动方式。
-- 需求路由：用户只说需求时，先判断涉及哪些项目、场景、规则、skill、规格和任务等级。
-- 流程编排：把 OpenSpec 的 SDD 规格层、superpowers 的 TDD 执行层和 G1-G7 任务状态接成一条可执行流程。
-- 规则治理：把团队规范、BFF/前端/iOS/发布规则和可复用 skill 挂到项目或场景上，避免每次靠聊天重新解释。
-- 看板观测：把当前任务、项目关系、OpenSpec 状态、验证结果、阻塞项和 recovery point 展示出来。
-- 多工具适配：让 Codex、Claude Code、Cursor、QoderWork、OpenCode、WorkBuddy 等工具读取同一套本地上下文。
-- 隐私隔离：公开框架保持空骨架，本机初始化后才生成个人画像、项目资料、任务证据和私有规则。
+> DevFlow 是按需能力集合，不是每个新对话的默认完整流程。
 
-这个仓库是刚安装状态：不包含个人项目、公司规则、历史任务或个人画像。安装后通过 `devflow-init` 引导用户在本机生成自己的配置。
+新对话开始时，Agent 应先根据用户输入判断是否需要 DevFlow，以及只需要哪一项能力：
 
-## SDD + TDD 模式
-
-DevFlow 默认把复杂任务拆成三层协作：
-
-- SDD 规格层：OpenSpec 负责把 PRD、Jira、Notion、Figma、跨项目验收标准沉淀成 proposal、design、tasks 和 spec delta。它回答“这次变化到底要做什么、为什么做、验收口径是什么”。
-- TDD 执行层：superpowers 负责 brainstorming、test-driven-development、systematic-debugging、verification-before-completion、code review 等执行纪律。它回答“怎么证明实现是对的、怎么先写测试、怎么排查和验收”。
-- DevFlow 编排层：DevFlow 负责选择项目、项目关系、场景、规则、skill、OpenSpec change 和 G1-G7 任务状态。它回答“当前任务涉及哪些项目、项目之间怎么联动、该读哪些上下文、该走哪条流程、下次窗口从哪里继续”。
-
-这三层不是互相替代：
-
-- 只有 OpenSpec：规格可以沉淀，但它不知道你本机有哪些项目、BFF/前端/iOS/脚本仓库之间怎么联动、该加载哪些规则和 skill，也不会自动维护当前任务看板。
-- 只有 superpowers：TDD、调试、验收纪律很强，但长期规格、跨会话任务状态、项目路由和多工具共享上下文不够稳定。
-- 加上 DevFlow：OpenSpec 的规格产物、superpowers 的执行步骤、项目关系、场景关系、rule/skill 索引、G1-G7 看板状态会被纳入同一个本地控制面。可恢复任务链只是其中一个结果，更重要的是 AI 能自动判断“该读什么、该用什么规范、该走什么流程、该把产物交给谁”。
-
-典型链路是：
-
-1. 用户只说需求。
-2. DevFlow 判断项目、场景、任务等级，以及是否需要 OpenSpec。
-3. L3/L4 或有 PRD/Jira/Notion/Figma 的任务进入 OpenSpec，形成可归档规格。
-4. 实现阶段由 superpowers 驱动 TDD、调试、验证和 review。
-5. DevFlow 把每个阶段的产物写入任务状态，让下一阶段或下一个 AI 工具继续使用。
-
-## 为什么按需加载
-
-DevFlow 不默认读取所有 Markdown、规则、skill 和历史任务，而是先读 JSON 索引，再按任务选择上下文。这样做有几个实际收益：
-
-- 上下文更小：先用项目、场景、规则、skill 的摘要做路由，只有命中任务时才读源文档，减少 token 消耗。
-- 命中更准：AI 不会同时看到一堆无关项目、旧规则、历史任务，降低把旧信息当成当前事实的概率。
-- 隐私边界更清楚：个人画像、私有项目、任务证据、截图和内部链接只在本机初始化后按需进入上下文，不会混进公开框架。
-- 跨项目关系更稳定：项目和场景关系写在 JSON 里，AI 可以先判断“这个需求涉及前端、BFF、iOS 还是发布脚本”，再加载对应资料。
-- 多工具更容易接力：Codex、Claude Code、Cursor、QoderWork 等工具都读同一套索引和任务状态，不需要每个窗口重复解释项目背景。
-- 长任务更容易恢复：G1-G7、OpenSpec change、验证结果、阻塞项和 recovery point 都在任务 JSON 里，下一次可以从明确位置继续。
+- `none`：普通问答、解释、代码片段，不读取 DevFlow。
+- `resume`：续接任务，只读当前任务、Workset、下一步和恢复点。
+- `light`：小 bug 或小改动，只做最小上下文和轻量记录。
+- `full`：大需求、跨项目、高风险或外部 PRD/工单/设计输入，才进入完整任务追踪、G1-G7 或 OpenSpec。
 
 ## 这个工具有什么用
 
-- 建立本地 AI 项目地图：项目、技术族、仓库路径、上下游关系、场景组合和验证入口都可索引。
-- 自动做需求路由：用户只说需求时，AI 可以先判断项目、场景、规则、skill、OpenSpec 和任务等级。
-- 减少聊天窗口上下文：AI 先读 JSON 索引，只在需要时加载业务项目的 `.ai-configs` 正文、规则或 skill。
-- 管理多个项目和项目关系：把本机多个项目登记成项目卡片，并记录项目路径、说明、规则、技能、场景关系和跨项目联动方式。
-- 管理工作场景：把“单项目修改”“前后端联调”“发布打包”“文档整理”等流程抽成场景。
-- 管理 skill 和 rule：把可复用能力和项目规范挂到指定项目或场景上，避免每次手动解释。
-- 连接 SDD 和 TDD：OpenSpec 管规格，superpowers 管执行，DevFlow 管两者之间的选择、状态和交接。
-- 查看任务进度：任务可以记录 G1-G7 阶段、OpenSpec 状态、验证结果和恢复点，面板里能直观看到当前进度。
-- 跨工具连续任务：Codex、Claude Code、Cursor 可以读取同一套本地索引和任务状态，用户切换工具时不用重新描述任务或重复粘贴大量文档。
-- 支持多个 AI 工具共用：安装脚本会把核心 skill 链接到常见 AI 工具的 skill 目录。
+- 管理本机项目、项目关系、场景模板、规则和技能入口。
+- 帮 Agent 从需求里推断最小工作集，而不是一次性加载所有资料。
+- 保存任务状态、验证结果、阻塞项、下一步和恢复点。
+- 支持 Codex、Claude Code、Cursor 等工具读取同一套本地状态。
+- 保持公开模板干净；个人画像、公司项目、任务证据只在本机初始化后生成。
 
-## 当前初始内容
-
-刚克隆后只保留最小骨架：
+刚安装的公开模板只包含：
 
 - 1 个项目：`DevFlow`
-- 1 个场景：`devflow-config`
+- 无默认场景配置
 - 2 个核心 skill：`devflow`、`devflow-init`
-- 空的 rules：`config/rules/rules.json`
-- 空的当前任务：`runtime/current.json`
+- 空 rules
+- 空当前任务
 
-真实项目、个人画像、历史任务、公司规则都需要用户在本机初始化后再生成。
+真实项目、个人画像、历史任务、公司规则和任务证据不属于公开模板。
 
 ## 安装
 
@@ -81,13 +40,111 @@ npm install -g @xuanmimi/devflow --registry=https://registry.npmjs.org/
 devflow init
 ```
 
-如果当前目录还没有 `devflow`，直接运行 `devflow init` 会自动创建 `./devflow` 本地工作目录，所以不需要手动 `git clone`。想指定位置可以用：
+指定工具：
+
+```bash
+devflow init --tools codex,claude-code,cursor
+```
+
+如果当前目录没有 DevFlow checkout，`devflow init` 会创建 `./devflow`。也可以指定目录：
 
 ```bash
 devflow init --dir ~/.local/share/devflow
 ```
 
-需要启动看板时再进入本地目录安装前端依赖：
+安装后，在 AI 工具里运行 `devflow-init`，用对话方式生成本机私有 profile、项目清单、场景模板、规则和技能。
+
+### 可选依赖（按需，缺省安全）
+
+DevFlow 本身不依赖它们；**不装也能正常用**，只是大任务会自动跳过对应能力，不报错、不阻塞。
+
+- **OpenSpec**——规格驱动的真相源，给 L3/L4 或有 PRD/工单/设计输入的大任务用：
+
+  ```bash
+  npm install -g @fission-ai/openspec@latest   # 可选
+  ```
+
+  不想要可以跳过：`devflow init --skip-openspec`。没装时 `devflow doctor` 只警告不报错，full 任务自动跳过规格层。
+
+- **superpowers**——执行纪律技能（头脑风暴、写计划、TDD、调试、验证等）。把 superpowers 的技能目录放/链接到 AI 工具的技能目录后，注册进 DevFlow：
+
+  ```bash
+  devflow add skill <superpowers-root> --family superpowers --scope global   # 可选
+  ```
+
+  注册只是让这些技能「**可被检索**」，**不会默认加载**；只有当任务真正需要某条纪律时，路由才会把对应技能带出来。
+
+## 真实开发流程（站在用户角度）
+
+装好之后，日常开发你**不需要手动选项目、选场景、写 `AGENTS.md`**。流程是这样的：
+
+### 一次性：登记你的项目和能力
+
+```text
+@devflow:init                                 # 首次：生成本机 profile
+@devflow:add /path/to/your-project            # 登记每个常用项目
+@devflow:add rule bff/error-handling          # 可选：登记团队规则
+@devflow:add skill <superpowers-root> --family superpowers --scope global   # 可选
+```
+
+### 日常：开一个 AI 对话，直接说需求
+
+直接说「给订货宝加订单导出功能」「修一下库存打印数量口径」这种话。DevFlow 会先**按需判断任务大小**，只加载必要上下文：
+
+| 任务大小 | DevFlow 怎么做 | 用 OpenSpec / superpowers 吗 |
+|----------|----------------|------------------------------|
+| 查代码 / 普通问答 | 直接答，不读 DevFlow | 不用 |
+| 小 bug / 小改动 | 轻量记录，能跨对话恢复 | 一般不用 |
+| 大需求 / 跨前后端 / 有 PRD·工单·设计 | 建可恢复任务，走 G1-G7 | 大任务才可选启用 |
+
+### 大任务：跟着 G1-G7 走，每步交接给下一步
+
+1. **G1 意图**：AI 用选项式问你（任务类型？优先目标？边界？要不要走 OpenSpec？），你选 `1/2/3` 或改写。
+2. **G2 调研**：找相关项目、接口、约束、未知项（装了 superpowers 可拉「头脑风暴」纪律）。
+3. **G3 方案/UI**：出技术方案或交互原型；大任务可写 OpenSpec proposal（装了 superpowers 可拉「写计划」纪律）。
+4. **G4 开发**：按「先 BFF 接口 → 再前端页面 → 最后原生对接」的顺序写码（可拉 TDD 纪律）。
+5. **G5 联调**：单项目跑通、跨项目联调、环境切换。
+6. **G6 验收**：对照需求、接口、diff、（如选用）OpenSpec spec 验收。
+7. **G7 运行/归档**：打包、最终验证、（如选用）`openspec archive` 把规格合并回主线、复盘。
+
+### 关了对话也能继续，还能换工具接力
+
+任务状态存在 DevFlow 里（不在某个对话里）。换新对话说「继续当前任务」，或在任何工具里跑：
+
+```bash
+devflow query current
+```
+
+就能恢复目标、当前步骤、下一步和恢复点。**这就是为什么可以「Claude Code 出方案、Codex 接手实现」**——两边读的是同一套本地状态。
+
+> 真实例子：这次「把 OpenSpec + superpowers 集成进 DevFlow」就是 Claude Code 出方案 + 建任务，Codex 分 M1/M2/M3 接手实现，全程靠 `devflow query current` 跨工具接力完成的。
+
+## 聊天入口
+
+```text
+@devflow:init
+@devflow:add /path/to/project
+@devflow:add scene-template 前后端联调
+@devflow:add skill /path/to/skill
+@devflow:add skill /path/to/superpowers --family superpowers --scope global
+@devflow:add rule bff/error-handling
+@devflow:del project old-project
+@devflow:del skill old-skill
+@devflow:del rule old/rule
+@devflow:del scene-template old-scene
+@devflow:task 新增订单导出功能
+@devflow:panel
+```
+
+- `@devflow:init`：首次配置本机资料；如果还没有个人画像，AI 会通过选项式提问帮你整理。
+- `@devflow:add`：登记项目、场景模板、skill 或 rule。
+- `@devflow:del`：移除 DevFlow 登记关系，不删除真实业务仓库。
+- `@devflow:task`：创建、续接或更新可恢复任务。
+- `@devflow:panel`：打开或查看任务/项目看板。
+
+当需求还很模糊或比较大时，AI 应给出几个可选方向，用户可以选 `1/2/3` 或直接修改选项。普通小改不强制使用 OpenSpec，也不强制完整 G1-G7。
+
+## 面板
 
 ```bash
 cd devflow
@@ -95,292 +152,37 @@ npm install
 npm run dev
 ```
 
-`devflow init` 会像 OpenSpec 初始化一样在终端里选择要配置的 AI 工具，可以多选：
+面板读取同一套本地状态：
 
-- Codex
-- Claude Code
-- Cursor
-- QoderWork
-- OpenCode
-- WorkBuddy
+- 当前任务和当前步骤
+- Workset 或项目组合
+- 下一步和恢复点
+- 项目、场景模板、skill、rule 关系
+- 配置检查结果
 
-也可以非交互安装：
+面板是观察层，不是新增配置的主入口。新增项目、规则、技能优先通过 AI 聊天里的 `@devflow:add`。
 
-```bash
-devflow init --tools codex,claude-code,cursor
-```
+## 公开模板边界
 
-初始化会安装/检查这些能力：
+公开模板可以包含：
 
-- `devflow`：维护 DevFlow 本身、检查配置、路由项目/场景/规则/skill。
-- `devflow-init`：首次初始化，引导用户把个人画像、项目清单、场景、skill、rule 整理成配置。
-- OpenSpec CLI：L3/L4 或有 PRD/Jira/Notion/Figma 输入的大任务使用的规格层。
-- superpowers：开发、调试、TDD、验收等执行纪律层。
+- 通用安装脚本
+- 通用文档
+- 通用 schema
+- 空示例配置
+- 不含个人和公司信息的通用 skill / rule
 
-如果不希望初始化时自动安装 OpenSpec，可以加：
+公开模板不应该包含：
 
-```bash
-devflow init --skip-openspec
-```
+- 个人画像
+- 公司项目路径
+- 真实项目关系
+- 任务 JSON 和任务证据
+- 内部工单、接口、截图、账号线索
+- token、账号、密钥、cookie
 
-完整安装说明见 [docs/install.md](docs/install.md)，项目流程说明见 [docs/project-introduction.md](docs/project-introduction.md)。`scripts/install-ai-context.mjs setup/doctor` 只作为内部脚本和排障入口，不作为日常安装入口。
+## 文档
 
-## 聊天入口
-
-安装后，可以直接在 AI 聊天框里使用这些入口：
-
-```text
-@devflow:add /path/to/project
-@devflow:add scene 前后端联调
-@devflow:add skill /path/to/skill
-@devflow:add rule bff/error-handling
-@devflow:del project old-project
-@devflow:del skill old-skill
-@devflow:del rule old/rule
-@devflow:del scene old-scene
-@devflow:task 新增订单导出功能
-@devflow:panel
-@devflow:init
-```
-
-- `@devflow:init`：首次配置本机资料和项目工作台；如果还没有个人画像，AI 会通过选项式提问帮你整理。
-- `@devflow:add`：添加项目、场景、skill 或 rule。
-- `@devflow:del`：移除项目、场景、skill 或 rule 的登记关系；不会删除真实业务仓库。
-- `@devflow:task`：创建或继续一个可恢复任务。
-- `@devflow:panel`：查看或打开任务/项目看板。
-
-当任务比较大、需求还只是一个概念时，AI 会先给出几个可选方向，帮你一步步选出目标、边界和优先级；你可以直接选 `1/2/3`，也可以基于选项提出自己的想法。大型需求、PRD/Jira/Notion/Figma、跨项目或高风险任务可以进入 OpenSpec；普通小改不强制使用 OpenSpec。
-
-## 启动面板
-
-```bash
-npm run dev
-```
-
-打开终端输出的本地地址，例如：
-
-```text
-http://127.0.0.1:5173/
-```
-
-面板里主要有：
-
-- 总览：查看当前项目、场景、技能、规则、任务状态。
-- 关系：查看项目、场景、技能、规则之间的关系图。
-- 任务：查看当前任务阶段、进度和各阶段产物。
-
-面板只负责查看，不负责新增或维护配置。新增项目、场景、skill、rule 统一通过 AI 聊天框里的 `@devflow:add` / `devflow` skill 路线完成。
-
-## 跨工具连续任务
-
-`DevFlow` 可以让 Codex、Claude Code、Cursor 等不同 AI 开发工具共享同一套本地上下文索引。用户不用在每个工具里重新解释需求、重新粘贴项目文档、重新说明规则。
-
-它主要通过这些文件保存可恢复的信息：
-
-- `config/projects/*.json`：项目摘要、项目路径、分布式入口、项目挂载的场景、skill、rule。
-- `config/scenes/*.json`：常见工作场景、跨项目关系和执行说明。
-- `config/skills/skills.json`：可复用 AI 能力目录。
-- `config/rules/rules.json`：项目或场景规则目录。
-- `runtime/current.json`：当前任务指针。
-- `runtime/tasks/*.json`：任务阶段、进度、恢复点、验证记录。
-- `runtime/tasks/<task-id>/<G1-G7>/`：任务工作目录。聊天、OpenSpec、superpowers 或项目开发中生成的任务文档，都要复制或写入对应阶段目录，并登记到该 gate 的 `artifacts`。
-
-典型使用方式：
-
-1. 在 Codex 里开始一个任务，并让 AI 记录到 DevFlow。
-2. DevFlow 写入任务目标、相关项目、场景、规则和当前阶段。
-3. 如果 AI 在聊天、OpenSpec、superpowers 或项目目录里生成了设计/开发/验收文档，用 `contextctl task artifact` 复制到 `runtime/tasks/<task-id>/<G1-G7>/`，并登记到对应阶段。
-4. 切到 Claude Code 或 Cursor 后，让新工具读取同一个 DevFlow。
-5. 新工具根据 `runtime/current.json`、任务 JSON 和任务工作目录恢复上下文。
-6. 用户只需要说“继续当前任务”，不需要重新塞一堆资料。
-
-如果要让不同工具稳定恢复任务，建议每个任务至少记录：
-
-- 任务目标
-- 涉及项目
-- 当前阶段
-- 已完成内容
-- 每个 G1-G7 阶段的产物路径
-- 下一步要做什么
-- 关键规则或 skill
-- 验证结果和未解决问题
-
-## 首次配置
-
-安装完成后，在 AI 工具里让它执行：
-
-```text
-运行 devflow-init
-```
-
-`devflow-init` 会一步一步询问：
-
-- 你的 AI 协作偏好是什么
-- 哪些信息只能保留在本机
-- 有哪些项目需要加入
-- 是否需要创建常用场景
-- 是否有现成的 `SKILL.md`
-- 是否有现成规则文件
-- 任务要不要按 G1-G7 记录进度
-
-用户可以给很凌乱的信息，AI 应该负责整理成结构化配置，而不是要求用户自己写 JSON。
-
-## 添加项目
-
-聊天框里的 `@devflow:add` 新增项目只需要用户提供项目路径，例如：
-
-```text
-@devflow:add /path/to/your/project
-```
-
-系统会尝试读取项目里的说明文件：
-
-- `.ai-configs/project.md`
-- `AGENTS.md`
-- `CLAUDE.md`
-- `README.md`
-- `.ai-configs/rules/*.md`
-- `.cursor/rules/*.mdc`
-- `.ai-configs/skills/**/SKILL.md`
-- 项目内的其它 `SKILL.md`
-
-如果项目还没有 `.ai-configs`，DevFlow 会先提示用户将创建 `.ai-configs/project.md`，确认后再迁移入口资料。然后写入：
-
-- 业务项目内的 `.ai-configs/project.md`
-- 业务项目根的轻量 `AGENTS.md` / `CLAUDE.md` 入口
-- `config/projects/<project-id>.json`
-- `config/projects/index.json`
-- 外部 skill / rule 来源路径和挂载关系
-
-项目正文、项目专属 skill、项目专属 rule 留在业务仓库；DevFlow 只集中管理索引、关系、场景和任务状态。
-
-## 添加场景
-
-场景用于描述一类工作流。可以在聊天框里说：
-
-```text
-@devflow:add scene 前后端联调
-```
-
-最少需要：
-
-- 场景名称
-- 场景用途
-- 要挂载哪些项目
-
-生成后会写入：
-
-- `config/scenes/<scene-id>.json`
-- `config/scenes/index.json`
-- 相关项目的 `scenes` 关系
-
-## 添加 skill
-
-skill 是 AI 可复用能力。可以在聊天框里说：
-
-```text
-@devflow:add skill /path/to/skill
-```
-
-最少需要：
-
-- skill 路径，指向一个包含 `SKILL.md` 的目录
-- 要挂载到哪些项目或场景
-
-导入后会复制到：
-
-```text
-bundles/skills/<skill-id>/SKILL.md
-```
-
-并更新：
-
-- `config/skills/skills.json`
-- 相关项目的 `skills` 关系
-
-如果没有现成文件，先让 AI 生成 skill 内容，再导入。
-
-## 添加 rule
-
-rule 是项目或场景的执行规则。可以从已有 `.md` 文件导入，也可以让 AI 根据用途生成。
-
-```text
-@devflow:add rule bff/error-handling
-```
-
-建议至少提供：
-
-- rule 名称
-- rule 用途
-- 适用项目或场景
-- 什么时候读取
-- 影响哪些文件类型或目录
-
-生成后会写入：
-
-- `bundles/rules/<rule-id>.md`
-- `config/rules/rules.json`
-- 相关项目或场景的 `rules` 关系
-
-通过 `@devflow:add /path/to/project` 发现的项目内 rule 不会复制到 `bundles/rules`，只会登记外部来源路径。
-
-## 验证
-
-每次初始化或修改配置后，建议运行：
-
-```bash
-devflow init --tools codex --skip-openspec
-node scripts/install-ai-context.mjs validate
-npm test
-npm run build
-```
-
-也可以在面板的“检查”页查看是否有失败项。
-
-## 重要目录
-
-```text
-config/entry.json                 AI 入口和读取策略
-config/profile.json               用户画像摘要，刚安装为空
-config/projects/index.json        项目索引
-config/scenes/index.json          场景索引
-config/skills/skills.json         skill 索引
-config/rules/rules.json           rule 索引
-runtime/current.json              当前任务状态，刚安装为空
-bundles/skills/devflow         核心维护 skill
-bundles/skills/devflow-init    首次初始化 skill
-docs/                             安装、流程、场景和画像文档
-
-业务项目内：
-.ai-configs/project.md            项目 AI 正文，跟随业务仓库维护
-.ai-configs/rules/                项目专属 rule，DevFlow 只登记来源路径
-.ai-configs/skills/               项目专属 skill，DevFlow 只登记来源路径
-AGENTS.md                         Codex 轻量入口
-CLAUDE.md                         Claude 轻量入口
-.cursor/rules/                    Cursor 规则入口，可指向或同步 .ai-configs/rules
-```
-
-## 隐私说明
-
-这个仓库的公开版本不应该提交：
-
-- 真实私有项目资料
-- 私有项目路径
-- token、cookie、账号、密钥
-- 工单、知识库链接、截图等敏感内容
-- 个人长期画像
-
-这些内容应该在用户自己的本机初始化后生成，并按需要加入 `.gitignore` 或保留在私有仓库里。
-
-## 推荐工作流
-
-1. `npm install -g @xuanmimi/devflow --registry=https://registry.npmjs.org/`。
-2. 运行 `devflow init`，选择要配置的 AI 工具。
-3. 在 AI 聊天框里运行 `@devflow:init`。
-4. 用 `@devflow:add /path/to/project` 把第一个项目加进来。
-5. 根据真实工作流用 `@devflow:add scene ...` 创建场景。
-6. 按项目或场景挂 skill 和 rule。
-7. 开始任务时用 `@devflow:task ...` 写入 `runtime/current.json` / `runtime/tasks/*.json`。
-8. 任务中生成的文档用 `node scripts/contextctl.mjs task artifact [task-id] --gate <G1-G7> --file <generated-doc-path>` 归档到任务目录。
-9. 需要观察状态时用 `@devflow:panel` 或本地 `npm run dev`。
-10. 切换到 Codex、Claude Code 或 Cursor 时，让新工具先读取 DevFlow 后继续。
+- [docs/install.md](docs/install.md)：安装、初始化、隐私边界和排障。
+- [docs/project-introduction.md](docs/project-introduction.md)：DevFlow 信息模型和任务状态说明。
+- [docs/product/devflow-workset-redesign.md](docs/product/devflow-workset-redesign.md)：动态 Workset 改造产品文档。

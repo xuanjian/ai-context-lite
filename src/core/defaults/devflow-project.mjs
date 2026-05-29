@@ -1,0 +1,52 @@
+// Mirrored from config/projects/devflow.json. JSON file will be removed after devflow migrate from-json.
+export const DEFAULT_DEVFLOW_PROJECT = {
+  "version": 1,
+  "id": "devflow",
+  "name": "DevFlow",
+  "technologyFamilyId": "workflow",
+  "technologyFamilyName": "Workflow",
+  "repoType": "workflow-control-plane",
+  "summary": "AI development workflow control plane, installer, onboarding skill, and TaskFlow skeleton.",
+  "path": ".",
+  "tags": [
+    "devflow",
+    "workflow",
+    "starter"
+  ],
+  "doc": {
+    "path": "README.md",
+    "title": "DevFlow",
+    "summary": "Install DevFlow, then run devflow-init to configure local profile, projects, skills, and rules.",
+    "whenToRead": "Read after selecting the DevFlow project or when installing/configuring this repository."
+  },
+  "skills": [
+    {
+      "id": "devflow",
+      "name": "DevFlow",
+      "description": "Use when entering, installing, validating, or modifying DevFlow, or when routing tasks through project, rule, skill, Workset, or task state.",
+      "sourcePath": "bundles/skills/devflow/SKILL.md",
+      "whenToLoad": "Load when installing, validating, or modifying DevFlow."
+    },
+    {
+      "id": "devflow-init",
+      "name": "devflow-init",
+      "description": "Use after installing DevFlow when the user needs first-time onboarding, personal AI preferences, project inventory, skill/rule mounting, or migration from scattered notes into DevFlow state.",
+      "sourcePath": "bundles/skills/devflow-init/SKILL.md",
+      "whenToLoad": "Load after install or when initializing profile, projects, skills, and rules from user-provided notes."
+    }
+  ],
+  "rules": [],
+  "tools": {},
+  "readPolicy": {
+    "defaultRead": [
+      "config/projects/devflow.json"
+    ],
+    "onDemandRead": [
+      "README.md",
+      "config/entry.json",
+      "bundles/skills/devflow/SKILL.md",
+      "bundles/skills/devflow-init/SKILL.md"
+    ],
+    "notes": "Start with this JSON. Load source Markdown, rules, or skills only when the task requires detailed instructions."
+  }
+};

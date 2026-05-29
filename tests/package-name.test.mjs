@@ -15,3 +15,10 @@ test("package publishes as DevFlow with the devflow CLI", () => {
     devflow: "scripts/devflow-cli.mjs"
   });
 });
+
+test("published package does not include legacy config or runtime JSON seeds", () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(rootDir, "package.json"), "utf8"));
+
+  assert.equal(pkg.files.some((file) => file === "runtime/current.json" || file === "runtime/tasks/.gitkeep"), false);
+  assert.equal(pkg.files.some((file) => file.startsWith("config/")), false);
+});

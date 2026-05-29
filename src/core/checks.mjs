@@ -2,21 +2,39 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { spawn } from "node:child_process";
-import { readJsonFile } from "./json-loader.mjs";
 import { resolveInside, toPath } from "./paths.mjs";
-import { buildContextGraph } from "./graph.mjs";
+import { buildPanelGraph } from "./panel-graph.mjs";
+import { createSqliteRepository } from "./repositories/sqlite-repository.mjs";
+import { defaultDbPath } from "./storage/schema.mjs";
+import { ensureSqliteDatabase } from "./storage/sqlite-bootstrap.mjs";
+import { openSpecCliCheck } from "./openspec-probe.mjs";
 
 export async function runChecks({ rootDir = process.cwd(), runCommands = true } = {}) {
   const rootPath = toPath(rootDir);
   const checks = [];
 
-  const entry = await readJsonFile(resolveInside(rootPath, "config/entry.json"));
-  const profile = await readJsonFile(resolveInside(rootPath, "config/profile.json"));
-  const projects = await readJsonFile(resolveInside(rootPath, "config/projects/index.json"));
-  const scenes = await readJsonFile(resolveInside(rootPath, "config/scenes/index.json"));
-  const skills = await readJsonFile(resolveInside(rootPath, "config/skills/skills.json"));
-  const rules = await readJsonFile(resolveInside(rootPath, "config/rules/rules.json"));
-  const current = await readJsonFile(resolveInside(rootPath, "runtime/current.json"));
+  let state;
+  try {
+    state = await loadChecksState(rootPath);
+  } catch (error) {
+    return {
+      checks: [{
+        id: "sqlite_database",
+        title: "SQLite database",
+        area: "storage",
+        status: "fail",
+        message: `${error.message} Run devflow migrate from-json, then retry.`,
+        sourcePath: "data/devflow.db"
+      }]
+    };
+  }
+  const entry = stateResult(rootPath, "data/devflow.db", state.entry);
+  const profile = stateResult(rootPath, "data/devflow.db", state.profile);
+  const projects = stateResult(rootPath, "data/devflow.db", { version: 1, projects: state.projects });
+  const scenes = stateResult(rootPath, "data/devflow.db", { version: 1, scenes: state.sceneTemplates });
+  const skills = stateResult(rootPath, "data/devflow.db", { version: 1, skills: state.skills });
+  const rules = stateResult(rootPath, "data/devflow.db", { version: 1, rules: state.rules });
+  const current = stateResult(rootPath, "data/devflow.db", state.current);
 
   checks.push(await fileCheck(rootPath, "frontend_package_json", "Frontend package.json", "frontend", "package.json"));
   checks.push(await directoryCheck(rootPath, "frontend_dependencies", "Frontend dependencies", "frontend", "node_modules", "install_frontend_dependencies"));
@@ -42,9 +60,9 @@ export async function runChecks({ rootDir = process.cwd(), runCommands = true } 
   checks.push(jsonCheck("rules_catalog", "Rules catalog", "config", rules));
   checks.push(await projectDocsCheck(rootPath, projects));
   checks.push(jsonCheck("runtime_current", "Runtime current", "config", current));
-  checks.push(await activeTaskCheck(rootPath, current));
+  checks.push(await activeTaskCheck(rootPath, current, state.activeTask));
 
-  const graph = await buildContextGraph({ rootDir: rootPath });
+  const graph = await buildChecksGraph(rootPath);
   checks.push({
     id: "graph_references",
     title: "Graph references",
@@ -60,10 +78,83 @@ export async function runChecks({ rootDir = process.cwd(), runCommands = true } 
   }));
   checks.push(await commandCheck(rootPath, "install_check_command", "Install check command", ["node", "scripts/install-ai-context.mjs", "check"], runCommands));
   checks.push(await commandCheck(rootPath, "install_validate_command", "Install validate command", ["node", "scripts/install-ai-context.mjs", "validate"], runCommands));
+  checks.push(openSpecCliCheck({ cwd: rootPath }));
   checks.push(await skillLinksCheck(rootPath, entry));
   checks.push(await commandCheck(rootPath, "project_entry_sync_drift", "Project entry sync drift", ["node", "scripts/install-ai-context.mjs", "sync-projects"], runCommands));
 
   return { checks };
+}
+
+async function buildChecksGraph(rootPath) {
+  const dbPath = defaultDbPath(rootPath);
+  await ensureSqliteDatabase({ rootDir: rootPath, dbPath });
+  const repository = createSqliteRepository({ rootDir: rootPath, dbPath });
+  return buildPanelGraph(repository, { rootDir: rootPath });
+}
+
+async function loadChecksState(rootPath) {
+  const dbPath = defaultDbPath(rootPath);
+  await ensureSqliteDatabase({ rootDir: rootPath, dbPath });
+  const repository = createSqliteRepository({ rootDir: rootPath, dbPath });
+  const [entry, profile, projects, sceneTemplates, skills, rules, tasks, activeTask] = await Promise.all([
+    repository.getEntry(),
+    repository.getProfile(),
+    repository.listProjects(),
+    repository.listSceneTemplates(),
+    repository.listSkills(),
+    repository.listRules(),
+    repository.listTasks(),
+    repository.getActiveTask()
+  ]);
+  return {
+    entry,
+    profile,
+    projects,
+    sceneTemplates,
+    skills,
+    rules,
+    activeTask,
+    current: synthesizeCurrentState(activeTask, tasks)
+  };
+}
+
+function stateResult(rootPath, relativePath, data) {
+  return {
+    ok: Boolean(data),
+    path: resolveInside(rootPath, relativePath),
+    data,
+    error: data ? undefined : new Error("SQLite state is missing.")
+  };
+}
+
+function synthesizeCurrentState(activeTask, tasks = []) {
+  if (!activeTask) {
+    return {
+      version: 1,
+      activeTaskId: "",
+      activeTaskPath: "",
+      activeProjectIds: [],
+      activeSceneIds: [],
+      activeWorksetId: "",
+      currentGate: "",
+      recentTaskIds: tasks.map((task) => task.id).filter(Boolean).slice(0, 20),
+      note: ""
+    };
+  }
+  const sceneIds = activeTask.sceneIds?.length
+    ? activeTask.sceneIds
+    : (activeTask.workset?.sceneTemplateId ? [activeTask.workset.sceneTemplateId] : []);
+  return {
+    version: 1,
+    activeTaskId: activeTask.id,
+    activeTaskPath: `runtime/tasks/${activeTask.id}.json`,
+    activeProjectIds: activeTask.projectIds || [],
+    activeSceneIds: sceneIds,
+    activeWorksetId: activeTask.workset?.id || "",
+    currentGate: activeTask.currentGate || activeTask.gate || "",
+    recentTaskIds: [activeTask.id, ...tasks.map((task) => task.id).filter((id) => id && id !== activeTask.id)].slice(0, 20),
+    note: activeTask.recoveryPoint || ""
+  };
 }
 
 function jsonCheck(id, title, area, result, actionId) {
@@ -108,16 +199,17 @@ async function directoryCheck(rootPath, id, title, area, relativePath, actionId)
 }
 
 async function viteAppCheck(rootPath) {
-  const indexExists = await existsAt(rootPath, "src/app/index.html");
-  const mainExists = await existsAt(rootPath, "src/app/main.jsx");
+  const panelPath = (await existsAt(rootPath, "apps/panel/index.html")) ? "apps/panel" : "src/app";
+  const indexExists = await existsAt(rootPath, `${panelPath}/index.html`);
+  const mainExists = await existsAt(rootPath, `${panelPath}/main.jsx`);
   const status = indexExists && mainExists ? "pass" : "fail";
   return {
-    id: "vite_app_resolved",
-    title: "Vite app",
-    area: "frontend",
+    id: "panel_app_resolved",
+    title: "Optional panel app",
+    area: "panel",
     status,
-    message: status === "pass" ? "Vite app entry files exist." : "Vite app entry files are missing.",
-    sourcePath: "src/app"
+    message: status === "pass" ? "Optional panel app entry files exist." : "Optional panel app entry files are missing.",
+    sourcePath: panelPath
   };
 }
 
@@ -134,8 +226,7 @@ async function projectDocsCheck(rootPath, projectsResult) {
 
   const missing = [];
   for (const project of projectsResult.data.projects || []) {
-    const detail = await readJsonFile(resolveInside(rootPath, project.path || `config/projects/${project.id}.json`));
-    const docPath = detail.data?.doc?.path;
+    const docPath = project.doc?.path;
     if (docPath && !(await existsAt(rootPath, docPath))) {
       missing.push(docPath);
     }
@@ -150,7 +241,7 @@ async function projectDocsCheck(rootPath, projectsResult) {
   };
 }
 
-async function activeTaskCheck(rootPath, currentResult) {
+async function activeTaskCheck(rootPath, currentResult, activeTask) {
   const taskPath = currentResult.data?.activeTaskPath;
   if (!taskPath) {
     return {
@@ -159,6 +250,15 @@ async function activeTaskCheck(rootPath, currentResult) {
       area: "config",
       status: "pass",
       message: "No active task path configured."
+    };
+  }
+  if (activeTask) {
+    return {
+      id: "active_task_path",
+      title: "Active task path",
+      area: "config",
+      status: "pass",
+      message: "Active task resolved from SQLite."
     };
   }
   return fileCheck(rootPath, "active_task_path", "Active task path", "config", taskPath);

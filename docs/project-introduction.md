@@ -1,41 +1,43 @@
 # DevFlow Project Introduction
 
-DevFlow is a portable local control plane for AI coding tools. Its job is not only to reduce context or recover tasks. It owns the local project map, project relationships, context routing, workflow state, rule/skill governance, tool adapters, privacy boundary, and task-board observability.
+DevFlow is a local context and task-state workbench for AI coding tools. It stores project metadata, scene templates, rules, skills, task state, and recovery points so agents can load the smallest useful context.
 
-Instead of loading every document into the model, DevFlow routes the current request to the smallest useful set of project, scene, rule, skill, spec, and task-state files.
+DevFlow is not the execution engine. Codex, Claude Code, Cursor, OpenSpec, and superpowers still decide and execute their own workflows. DevFlow provides durable state and context selection.
 
-## Core Layers
+## Core Model
 
-DevFlow uses four layers:
+- `Project Registry`: project id, path, summary, entry docs, rules, skills, and future capability metadata.
+- `Capability Map`: business or technical capabilities used to infer which projects may be relevant.
+- `Scene Template`: reusable workflow direction or relationship hint. It is not the final project scope.
+- `Task Workset`: the actual project/rule/skill set selected for one task.
+- `Task State`: current step, gate when needed, blockers, evidence, next action, and recovery point.
+- `Agent Adapter`: generated AGENTS/CLAUDE/Cursor entries that tell each tool when and how to use DevFlow.
+- `Task Board`: read-only visibility over the same JSON state that agents read.
 
-- DevFlow: the routing and state layer. It stores project indexes, scene indexes, rules, skills, and task JSON.
-- superpowers: the execution discipline layer. It drives brainstorming, TDD, debugging, planning, verification, review, and branch finishing.
-- OpenSpec: the optional spec-driven layer. It is used for L3/L4 work, PRD/Jira/Notion/Figma-backed work, cross-project work, or high-risk changes.
-- task board: the visibility layer. It shows active task state, gate progress, relationships, and checks from the JSON indexes.
+## On-Demand Modes
 
-The recoverable task chain is one outcome of this control plane. The bigger value is that an AI tool can decide which project is involved, which related projects may be affected, which rules and skills apply, whether a durable OpenSpec change is needed, and where the next session should resume.
+Agent entries should classify each new request before reading DevFlow data:
 
-Do not install `gstack` or `ce` as default workflow tools. DevFlow only borrows the useful handoff idea: every stage leaves a compact artifact that feeds the next stage.
+- `none`: ordinary questions, explanations, or code snippets. Do not read DevFlow unless project context is clearly needed.
+- `resume`: continuing current work. Read `runtime/current.json`, the active task, Workset, `nextAction`, and `recoveryPoint`.
+- `light`: small bug or small change. Use minimal context and light tracking only when the work should survive the chat.
+- `full`: large, cross-project, high-risk, Jira/Notion/Figma/PRD-backed work. Use full tracking, G1-G7, and OpenSpec when selected.
+
+Do not start G1-G7 by default.
 
 ## Distributed Project Context
 
-Project-specific AI context should live with the business project:
+Project-specific context should live with the business project:
 
-- `.ai-configs/project.md`: the main project AI document.
-- `.ai-configs/rules/`: project-specific rules.
-- `.ai-configs/skills/`: project-specific skills.
-- `AGENTS.md` / `CLAUDE.md`: lightweight AI-tool entries that point back to DevFlow.
-- `.cursor/rules/`: Cursor-facing rule entry, which can point to or mirror `.ai-configs/rules/`.
+- `.ai-configs/project.md`
+- `.ai-configs/rules/`
+- `.ai-configs/skills/`
+- `AGENTS.md` / `CLAUDE.md`
+- `.cursor/rules/`
 
-DevFlow should not duplicate those files into `docs/repos`. It stores the
-portable relationship layer instead: project ids, paths, scenes, mounted
-skills, mounted rules, task state, and source paths. This keeps reusable
-project knowledge close to the code while keeping cross-project routing and
-board visibility centralized.
+DevFlow stores the relationship layer: project ids, source paths, scene templates, mounted skills/rules, and task state. It should not duplicate full project documents into the public template.
 
 ## Chat Entries
-
-DevFlow is intended to be used from the AI chat as a routed skill:
 
 ```text
 @devflow:add /path/to/project
@@ -51,91 +53,40 @@ DevFlow is intended to be used from the AI chat as a routed skill:
 @devflow:init
 ```
 
-These entries are sub-intents of the same `DevFlow` skill, not separate
-always-loaded skills. The router keeps context small by reading indexes first,
-then loading only the selected project, scene, rule, skill, OpenSpec, or task
-state.
+`@devflow:init` handles local onboarding. `@devflow:add` and `@devflow:del` maintain registry entries. `@devflow:task` creates, resumes, or updates tracked work. `@devflow:panel` opens or explains the board.
 
-`@devflow:add` owns project/scene/skill/rule intake. For projects, a path is
-enough: DevFlow scans `.ai-configs/project.md`, lightweight AI entry docs,
-Cursor rules, and project-local skills/rules.
-For scenes, skills, and rules, it asks for project or scene association only
-when it cannot infer the mount target.
+## Task Tracking
 
-`@devflow:del` owns project/scene/skill/rule removal from DevFlow. It
-removes indexes, mounts, generated docs, managed bundled skill/rule files, and
-runtime references, but it must not delete the real business repository or
-external source files.
+Use task tracking only when work should survive the current chat.
 
-`@devflow:init` is the first-install chat route. It should keep guiding the
-user until the local profile, first projects, scenes, skills, rules, and panel
-checks are configured enough to use DevFlow without manual JSON editing.
+Light tracking records:
 
-## Task Flow
+- goal
+- selected projects or Workset
+- current step
+- next action
+- evidence
+- recovery point
 
-Tracked tasks move through G1-G7:
+Full tracking may additionally use G1-G7:
 
-- G1 Intent / Intake: record the goal, scope, level, selected projects/scenes, and whether OpenSpec is needed. For L3/L4 or vague concept tasks, use Socratic multiple-choice questions so the user can choose among concrete options instead of inventing the full boundary from scratch.
-- G2 Discovery: gather evidence, constraints, upstream links, and unknowns.
-- G3 Plan / Product UI: produce the plan, UI notes, technical design, or OpenSpec proposal/design/tasks/spec delta.
-- G4 Development: implement within the selected write scope and record changed files and expected verification.
-- G5 Integration: run or connect affected projects, environments, APIs, devices, and packaging flows.
-- G6 Acceptance: compare the result with the user request, OpenSpec, UI, interface behavior, diff, and tests.
-- G7 Run / Package Archive: record run/debug/package steps, final verification, known gaps, OpenSpec archive status, and lessons learned.
+- G1 Intent / Intake
+- G2 Discovery
+- G3 Plan / Product UI
+- G4 Development
+- G5 Integration
+- G6 Acceptance
+- G7 Run / Package Archive
 
-Each gate should leave a short handoff note or artifact. The next gate starts from that output instead of rediscovering the same context.
-
-## OpenSpec Usage
-
-Use OpenSpec when the task needs a durable spec:
-
-- L3/L4 change.
-- External input from Jira, Notion, Figma, PRD, or a formal ticket.
-- Cross-project or cross-device behavior.
-- High-risk work such as release, packaging, permissions, money, data migration, inventory, or account flows.
-
-Do not use OpenSpec for every small edit. For L1/L2 work, DevFlow task state plus superpowers execution is usually enough.
-
-When OpenSpec is selected, task JSON should store only the compact link information:
-
-- `spec.tool`
-- `spec.changeId`
-- `spec.path`
-- `spec.status`
-- `spec.handoff`
-
-At G7, completed OpenSpec changes should be archived so the finished delta is merged back into durable specs and the completed change moves to the archive area. Lessons learned should be recorded as a compact task note or follow-up artifact before archive when they should influence future work.
-
-## Rules And Skills
-
-Use rules and skills for durable standards that should apply across many tasks:
-
-- BFF family conventions.
-- Frontend family conventions.
-- iOS family conventions.
-- Release and packaging conventions.
-- Scene-specific debugging or integration flows.
-
-Rules answer "what constraints apply here?" Skills answer "what reusable capability should the AI load here?" OpenSpec answers "what is this particular change supposed to do?"
+OpenSpec is optional and should be used for L3/L4, formal PRD/ticket/design input, cross-project/cross-device behavior, or high-risk changes. It should not be used for every small edit.
 
 ## Task Board
 
-The board reads the same JSON that AI tools read:
-
-- `runtime/current.json`: active task pointer.
-- `runtime/tasks/*.json`: gate, level, progress, blockers, recovery point, verification, and spec status.
-- `config/projects/*.json`: project cards and mounted scenes/skills/rules.
-- `config/scenes/*.json`: workflow scenes and cross-project relationships.
-- `config/skills/skills.json`: reusable capability catalog.
-- `config/rules/rules.json`: durable rule catalog.
-- business project `.ai-configs/project.md`, `.ai-configs/rules/`, and `.ai-configs/skills/`: distributed project context loaded only when selected.
-
-Use the board to answer:
+The board answers:
 
 - What task is active?
-- Which gate is it in?
-- Which projects and scenes are selected?
-- Is OpenSpec selected?
+- Which step or gate is it in?
+- Which projects or Workset are selected?
 - What is blocked?
 - What was verified?
 - Where should a future session resume?
@@ -148,18 +99,6 @@ npm run dev
 
 Then open the URL printed by Vite, usually `http://127.0.0.1:5173/`.
 
-## Typical Workflow
-
-1. User states a goal.
-2. DevFlow selects the project, scene, task level, and whether OpenSpec is needed.
-3. For tracked work, `@devflow:task` writes the task JSON through the
-   underlying task action/script.
-4. The AI loads only selected project/scene/rule/skill/spec context.
-5. superpowers drives planning, TDD, debugging, verification, and review.
-6. Each G1-G7 gate leaves a compact handoff note.
-7. The board shows progress and recovery state.
-8. At G7, the task records run/package/archive notes, OpenSpec archive result if used, and reusable lessons.
-
 ## Public Skeleton Boundary
 
-The public master branch is an empty framework. It should include scripts, schemas, docs, bundled generic skills, tests, and examples. It should not include local task data, private project docs, personal profile data, company names, internal repository paths, tickets, tokens, or screenshots.
+The public template should include generic scripts, docs, schemas, bundled core skills, tests, and empty example configuration. It should not include local task data, private project docs, personal profile data, company names, internal paths, tickets, tokens, screenshots, or account details.

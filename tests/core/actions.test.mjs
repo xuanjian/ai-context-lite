@@ -3,7 +3,14 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { fileURLToPath } from "node:url";
 import { runAction } from "../../src/core/actions.mjs";
+import { createSqliteRepository } from "../../src/core/repositories/sqlite-repository.mjs";
+import { seedSqliteFromJsonFixture } from "../helpers/sqlite-fixtures.mjs";
+
+const testFile = fileURLToPath(import.meta.url);
+const repoRoot = path.resolve(path.dirname(testFile), "../..");
+const legacyGeneratedDocGuidancePattern = /config\/(?:projects\/[^`\s]+\.json|scenes\/[^`\s]+\.json|rules\/rules\.json)/;
 
 test("runAction rejects unknown actions", async () => {
   const result = await runAction({
@@ -17,8 +24,9 @@ test("runAction rejects unknown actions", async () => {
 });
 
 test("create_minimal_profile_json refuses to overwrite existing files", async () => {
+  const rootDir = await copyFixture();
   const result = await runAction({
-    rootDir: new URL("./fixtures/basic-ai-context/", import.meta.url),
+    rootDir,
     actionId: "create_minimal_profile_json",
     body: {}
   });
@@ -36,6 +44,34 @@ test("sync_project_entry requires a known project id", async () => {
 
   assert.equal(result.ok, false);
   assert.equal(result.error.code, "invalid_project_id");
+});
+
+test("ai context actions run install-ai-context in-process against SQLite state", async () => {
+  const rootDir = await copyFixture();
+  const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), "context-studio-sync-project-"));
+  try {
+    await copyCoreSkills(rootDir);
+    const repository = createSqliteRepository({ rootDir });
+    const project = await repository.getProject("demo-project");
+    await repository.writeProject({ ...project, path: projectDir });
+    await fs.rm(path.join(rootDir, "config"), { recursive: true, force: true });
+    await fs.rm(path.join(rootDir, "runtime"), { recursive: true, force: true });
+
+    const validate = await runAction({ rootDir, actionId: "validate_ai_context" });
+    assert.equal(validate.ok, true, validate.output || validate.error?.message);
+    assert.match(validate.output, /DevFlow validation passed/);
+
+    const sync = await runAction({
+      rootDir,
+      actionId: "sync_project_entry",
+      body: { projectId: "demo-project" }
+    });
+    assert.equal(sync.ok, true, sync.output || sync.error?.message);
+    assert.match(await fs.readFile(path.join(projectDir, "AGENTS.md"), "utf8"), /devflow query route "<user request>"/);
+  } finally {
+    await fs.rm(rootDir, { recursive: true, force: true });
+    await fs.rm(projectDir, { recursive: true, force: true });
+  }
 });
 
 test("create_minimal_person_profile creates only the missing allowlisted file", async () => {
@@ -76,13 +112,15 @@ test("add_project_from_path scans project docs, skills, rules and writes relatio
 
   assert.equal(result.ok, true);
   assert.ok(result.changedPaths.includes(path.join(projectDir, ".ai-configs/project.md")));
-  assert.ok(result.changedPaths.includes("config/projects/payment-app.json"));
+  assert.ok(result.changedPaths.includes("data/devflow.db"));
   assert.equal(result.changedPaths.includes("docs/repos/payment-app.md"), false);
   assert.equal(await exists(path.join(rootDir, "docs/repos/payment-app.md")), false);
   assert.equal(await exists(path.join(rootDir, "bundles/skills/payment-app-release-helper/SKILL.md")), false);
   assert.equal(await exists(path.join(rootDir, "bundles/rules/payment-app/payment.md")), false);
+  assert.equal(await exists(path.join(rootDir, "config/projects/payment-app.json")), false);
 
-  const project = await readJson(path.join(rootDir, "config/projects/payment-app.json"));
+  const repository = createSqliteRepository({ rootDir });
+  const project = await repository.getProject("payment-app");
   assert.equal(project.path, projectDir);
   assert.equal(project.doc.path, path.join(projectDir, ".ai-configs/project.md"));
   assert.equal(project.sourceOfTruth.projectDoc, "distributed");
@@ -91,11 +129,14 @@ test("add_project_from_path scans project docs, skills, rules and writes relatio
   assert.equal(project.skills[0].sourcePath, path.join(projectDir, ".codex/skills/release-helper/SKILL.md"));
   assert.equal(project.rules[0].id, "payment-app/payment");
   assert.equal(project.rules[0].sourcePath, path.join(projectDir, ".cursor/rules/payment.mdc"));
+  const projectDoc = await fs.readFile(path.join(projectDir, ".ai-configs/project.md"), "utf8");
+  assert.match(projectDoc, /devflow query route/);
+  assert.doesNotMatch(projectDoc, legacyGeneratedDocGuidancePattern);
 
-  const skills = await readJson(path.join(rootDir, "config/skills/skills.json"));
-  assert.ok(skills.skills.some((skill) => skill.id === "payment-app-release-helper" && skill.sourceType === "external-file"));
-  const rules = await readJson(path.join(rootDir, "config/rules/rules.json"));
-  assert.ok(rules.rules.some((rule) => rule.id === "payment-app/payment" && rule.projectIds.includes("payment-app") && rule.sourceType === "external-file"));
+  const skills = await repository.listSkills();
+  assert.ok(skills.some((skill) => skill.id === "payment-app-release-helper" && skill.sourceType === "external-file"));
+  const rules = await repository.listRules();
+  assert.ok(rules.some((rule) => rule.id === "payment-app/payment" && rule.projectIds.includes("payment-app") && rule.sourceType === "external-file"));
 });
 
 test("add_project_from_path asks before creating .ai-configs", async () => {
@@ -142,8 +183,8 @@ test("add_project_from_path skips unreadable rule symlinks", async () => {
   });
 
   assert.equal(result.ok, true, result.error?.message);
-  const rules = await readJson(path.join(rootDir, "config/rules/rules.json"));
-  assert.equal(rules.rules.some((rule) => rule.id === "symlink-app/broken-rule"), false);
+  const rules = await createSqliteRepository({ rootDir }).listRules();
+  assert.equal(rules.some((rule) => rule.id === "symlink-app/broken-rule"), false);
 });
 
 test("add_scene creates scene docs and mounts it to projects", async () => {
@@ -161,11 +202,17 @@ test("add_scene creates scene docs and mounts it to projects", async () => {
   });
 
   assert.equal(result.ok, true);
-  const scene = await readJson(path.join(rootDir, "config/scenes/payment-debug.json"));
-  assert.equal(scene.projects[0].id, "demo-project");
-  const project = await readJson(path.join(rootDir, "config/projects/demo-project.json"));
+  assert.equal(await exists(path.join(rootDir, "config/scenes/payment-debug.json")), false);
+  const repository = createSqliteRepository({ rootDir });
+  const scene = await repository.getSceneTemplate("payment-debug");
+  assert.equal(scene.projectHints[0].id, "demo-project");
+  const project = await repository.getProject("demo-project");
   assert.ok(project.scenes.some((item) => item.id === "payment-debug"));
   assert.ok(result.changedPaths.includes("docs/scenes/payment-debug.md"));
+  const sceneDoc = await fs.readFile(path.join(rootDir, "docs/scenes/payment-debug.md"), "utf8");
+  assert.match(sceneDoc, /devflow query route/);
+  assert.match(sceneDoc, /devflow query rules/);
+  assert.doesNotMatch(sceneDoc, legacyGeneratedDocGuidancePattern);
 });
 
 test("add_skill_from_path copies skill and mounts it to selected projects", async () => {
@@ -181,8 +228,48 @@ test("add_skill_from_path copies skill and mounts it to selected projects", asyn
 
   assert.equal(result.ok, true);
   assert.ok(result.changedPaths.includes("bundles/skills/qa-helper/SKILL.md"));
-  const project = await readJson(path.join(rootDir, "config/projects/demo-project.json"));
+  const project = await createSqliteRepository({ rootDir }).getProject("demo-project");
   assert.ok(project.skills.some((item) => item.id === "qa-helper"));
+});
+
+test("add_skill_from_path registers batch skill directories with family and global scope without vendoring", async () => {
+  const rootDir = await copyFixture();
+  const superpowersRoot = await fs.mkdtemp(path.join(os.tmpdir(), "superpowers-skills-"));
+  await fs.mkdir(path.join(superpowersRoot, "test-driven-development"), { recursive: true });
+  await fs.mkdir(path.join(superpowersRoot, "writing-plans"), { recursive: true });
+  await fs.writeFile(
+    path.join(superpowersRoot, "test-driven-development", "SKILL.md"),
+    "---\nname: test-driven-development\ndescription: Use when implementing feature work or bugfixes.\n---\n# TDD\n",
+    "utf8"
+  );
+  await fs.writeFile(
+    path.join(superpowersRoot, "writing-plans", "SKILL.md"),
+    "---\nname: writing-plans\ndescription: Use when writing implementation plans.\n---\n# Writing Plans\n",
+    "utf8"
+  );
+
+  const result = await runAction({
+    rootDir,
+    actionId: "add_skill_from_path",
+    body: { skillPath: superpowersRoot, family: "superpowers", scope: "global" }
+  });
+
+  assert.equal(result.ok, true, result.error?.message);
+  assert.ok(result.changedPaths.includes("data/devflow.db"));
+  assert.equal(result.changedPaths.some((item) => item.startsWith("bundles/skills/test-driven-development")), false);
+  const skills = await createSqliteRepository({ rootDir }).listSkills();
+  const tdd = skills.find((skill) => skill.id === "test-driven-development");
+  const plans = skills.find((skill) => skill.id === "writing-plans");
+  assert.equal(tdd.family, "superpowers");
+  assert.equal(tdd.scope, "global");
+  assert.equal(tdd.sourcePath, path.join(superpowersRoot, "test-driven-development", "SKILL.md"));
+  assert.equal(tdd.sourceType, "external-file");
+  assert.ok(tdd.tags.includes("superpowers"));
+  assert.ok(tdd.tags.includes("test-driven-development"));
+  assert.ok(tdd.tags.includes("tdd"));
+  assert.equal(plans.family, "superpowers");
+  assert.equal(plans.scope, "global");
+  assert.equal(await exists(path.join(rootDir, "bundles/skills/test-driven-development/SKILL.md")), false);
 });
 
 test("add_rule creates a rule file and mounts project plus scene relationships", async () => {
@@ -203,15 +290,17 @@ test("add_rule creates a rule file and mounts project plus scene relationships",
 
   assert.equal(result.ok, true);
   assert.ok(result.changedPaths.includes("bundles/rules/payment/safe-callback.md"));
-  const rules = await readJson(path.join(rootDir, "config/rules/rules.json"));
-  assert.ok(rules.rules.some((rule) => rule.id === "payment/safe-callback" && rule.sceneIds.includes("demo-scene")));
-  const scene = await readJson(path.join(rootDir, "config/scenes/demo-scene.json"));
-  assert.ok(scene.rules.some((item) => item.id === "payment/safe-callback"));
+  const repository = createSqliteRepository({ rootDir });
+  const rules = await repository.listRules();
+  assert.ok(rules.some((rule) => rule.id === "payment/safe-callback" && rule.sceneIds.includes("demo-scene")));
+  const scene = await repository.getSceneTemplate("demo-scene");
+  assert.ok(scene.ruleHints.some((item) => item.id === "payment/safe-callback"));
 });
 
 test("delete_project removes project indexes and graph references without touching external repo", async () => {
   const rootDir = await copyFixture();
-  const externalPath = (await readJson(path.join(rootDir, "config/projects/demo-project.json"))).path;
+  const repository = createSqliteRepository({ rootDir });
+  const externalPath = (await repository.getProject("demo-project")).path;
 
   const result = await runAction({
     rootDir,
@@ -220,19 +309,53 @@ test("delete_project removes project indexes and graph references without touchi
   });
 
   assert.equal(result.ok, true);
-  assert.equal(await exists(path.join(rootDir, "config/projects/demo-project.json")), false);
+  assert.equal(await exists(path.join(rootDir, "config/projects/demo-project.json")), true);
   assert.equal(await exists(path.join(rootDir, "docs/repos/demo-project.md")), false);
-  const projectIndex = await readJson(path.join(rootDir, "config/projects/index.json"));
-  assert.equal(projectIndex.projects.some((item) => item.id === "demo-project"), false);
-  const scene = await readJson(path.join(rootDir, "config/scenes/demo-scene.json"));
-  assert.equal(scene.projects.some((item) => item.id === "demo-project"), false);
-  const rules = await readJson(path.join(rootDir, "config/rules/rules.json"));
-  assert.deepEqual(rules.rules[0].projectIds, []);
-  const current = await readJson(path.join(rootDir, "runtime/current.json"));
-  assert.deepEqual(current.activeProjectIds, []);
-  const task = await readJson(path.join(rootDir, "runtime/tasks/demo-task.json"));
+  assert.equal(await repository.getProject("demo-project"), null);
+  const scene = await repository.getSceneTemplate("demo-scene");
+  assert.equal(scene.projectHints.some((item) => item.id === "demo-project"), false);
+  const rules = await repository.listRules();
+  assert.deepEqual(rules[0].projectIds, []);
+  const task = await repository.getTask("demo-task");
   assert.deepEqual(task.projectIds, []);
+  assert.deepEqual(task.workset.projects, []);
   assert.equal(externalPath, "/tmp/demo-project");
+});
+
+test("finish_task action marks a task finished at G7 through SQLite state", async () => {
+  const rootDir = await copyFixture();
+
+  const result = await runAction({
+    rootDir,
+    actionId: "finish_task",
+    body: { taskId: "demo-task", note: "completed from panel" }
+  });
+
+  assert.equal(result.ok, true);
+  assert.ok(result.changedPaths.includes("data/devflow.db"));
+  assert.ok(result.changedPaths.includes("runtime/tasks/demo-task/handoff.md"));
+  const task = await createSqliteRepository({ rootDir }).getTask("demo-task");
+  assert.equal(task.status, "finished");
+  assert.equal(task.currentGate, "G7");
+});
+
+test("delete_task action removes only SQLite task records and leaves markdown handoff in place", async () => {
+  const rootDir = await copyFixture();
+  const handoffPath = path.join(rootDir, "runtime/tasks/demo-task/handoff.md");
+
+  const result = await runAction({
+    rootDir,
+    actionId: "delete_task",
+    body: { taskId: "demo-task" }
+  });
+
+  assert.equal(result.ok, true);
+  assert.ok(result.changedPaths.includes("data/devflow.db"));
+  assert.equal(await exists(handoffPath), true);
+  const repository = createSqliteRepository({ rootDir });
+  assert.equal(await repository.getTask("demo-task"), null);
+  assert.equal(await repository.getWorkset("demo-task"), null);
+  assert.equal(await repository.getActiveTask(), null);
 });
 
 test("delete_scene removes scene indexes and task references", async () => {
@@ -245,16 +368,17 @@ test("delete_scene removes scene indexes and task references", async () => {
   });
 
   assert.equal(result.ok, true);
-  assert.equal(await exists(path.join(rootDir, "config/scenes/demo-scene.json")), false);
+  assert.equal(await exists(path.join(rootDir, "config/scenes/demo-scene.json")), true);
   assert.equal(await exists(path.join(rootDir, "docs/scenes/demo-scene.md")), false);
-  const sceneIndex = await readJson(path.join(rootDir, "config/scenes/index.json"));
-  assert.equal(sceneIndex.scenes.some((item) => item.id === "demo-scene"), false);
-  const project = await readJson(path.join(rootDir, "config/projects/demo-project.json"));
+  const repository = createSqliteRepository({ rootDir });
+  assert.equal(await repository.getSceneTemplate("demo-scene"), null);
+  const project = await repository.getProject("demo-project");
   assert.equal(project.scenes.some((item) => item.id === "demo-scene"), false);
-  const rules = await readJson(path.join(rootDir, "config/rules/rules.json"));
-  assert.deepEqual(rules.rules[0].sceneIds, []);
-  const current = await readJson(path.join(rootDir, "runtime/current.json"));
-  assert.deepEqual(current.activeSceneIds, []);
+  const rules = await repository.listRules();
+  assert.deepEqual(rules[0].sceneIds, []);
+  const task = await repository.getTask("demo-task");
+  assert.deepEqual(task.sceneIds, []);
+  assert.equal(task.workset.sceneTemplateId, "");
 });
 
 test("delete_skill removes catalog entry and project mounts", async () => {
@@ -267,9 +391,10 @@ test("delete_skill removes catalog entry and project mounts", async () => {
   });
 
   assert.equal(result.ok, true);
-  const skills = await readJson(path.join(rootDir, "config/skills/skills.json"));
-  assert.equal(skills.skills.some((item) => item.id === "demo-skill"), false);
-  const project = await readJson(path.join(rootDir, "config/projects/demo-project.json"));
+  const repository = createSqliteRepository({ rootDir });
+  const skills = await repository.listSkills();
+  assert.equal(skills.some((item) => item.id === "demo-skill"), false);
+  const project = await repository.getProject("demo-project");
   assert.equal(project.skills.some((item) => item.id === "demo-skill"), false);
 });
 
@@ -284,23 +409,21 @@ test("delete_rule removes catalog entry and project plus scene mounts", async ()
 
   assert.equal(result.ok, true);
   assert.equal(await exists(path.join(rootDir, "bundles/rules/demo-rule.md")), false);
-  const rules = await readJson(path.join(rootDir, "config/rules/rules.json"));
-  assert.equal(rules.rules.some((item) => item.id === "demo-rule"), false);
-  const project = await readJson(path.join(rootDir, "config/projects/demo-project.json"));
+  const repository = createSqliteRepository({ rootDir });
+  const rules = await repository.listRules();
+  assert.equal(rules.some((item) => item.id === "demo-rule"), false);
+  const project = await repository.getProject("demo-project");
   assert.equal(project.rules.some((item) => item.id === "demo-rule"), false);
-  const scene = await readJson(path.join(rootDir, "config/scenes/demo-scene.json"));
-  assert.equal(scene.rules.some((item) => item.id === "demo-rule"), false);
+  const scene = await repository.getSceneTemplate("demo-scene");
+  assert.equal(scene.ruleHints.some((item) => item.id === "demo-rule"), false);
 });
 
 async function copyFixture() {
   const source = new URL("./fixtures/basic-ai-context/", import.meta.url);
   const rootDir = await fs.mkdtemp(path.join(os.tmpdir(), "context-studio-fixture-"));
   await fs.cp(source, rootDir, { recursive: true });
+  await seedSqliteFromJsonFixture(rootDir);
   return rootDir;
-}
-
-async function readJson(filePath) {
-  return JSON.parse(await fs.readFile(filePath, "utf8"));
 }
 
 async function exists(filePath) {
@@ -310,4 +433,28 @@ async function exists(filePath) {
   } catch {
     return false;
   }
+}
+
+async function copyCoreSkills(rootDir) {
+  await fs.mkdir(path.join(rootDir, "bundles", "skills"), { recursive: true });
+  await fs.mkdir(path.join(rootDir, "scripts"), { recursive: true });
+  await fs.cp(path.join(repoRoot, "bundles/skills/devflow"), path.join(rootDir, "bundles/skills/devflow"), { recursive: true });
+  await fs.cp(path.join(repoRoot, "bundles/skills/devflow-init"), path.join(rootDir, "bundles/skills/devflow-init"), { recursive: true });
+  await fs.cp(path.join(repoRoot, "scripts/install-ai-context.mjs"), path.join(rootDir, "scripts/install-ai-context.mjs"));
+  const repository = createSqliteRepository({ rootDir });
+  const entry = await repository.getEntry();
+  await repository.setConfig("entry", {
+    ...entry,
+    installation: {
+      ...(entry.installation || {}),
+      script: "scripts/install-ai-context.mjs"
+    }
+  });
+  const [rule] = await repository.listRules();
+  await repository.writeRule({
+    ...rule,
+    applyMode: "scene-on-demand",
+    globs: ["**/*"],
+    whenToRead: "Read this demo rule for validation fixtures."
+  });
 }

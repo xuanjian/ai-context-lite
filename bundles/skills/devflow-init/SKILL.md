@@ -1,6 +1,6 @@
 ---
 name: devflow-init
-description: Use after installing DevFlow when the user needs first-time onboarding, personal AI preferences, project inventory, scene creation, skill/rule mounting, or migration from scattered notes into DevFlow JSON.
+description: Use after installing DevFlow when the user needs first-time onboarding, personal AI preferences, project inventory, scene creation, skill/rule mounting, or migration from scattered notes into DevFlow state.
 ---
 
 # devflow-init
@@ -11,8 +11,8 @@ Use this skill immediately after DevFlow is installed, normally through the
 chat entry `@devflow:init`, or whenever a user wants to initialize their own
 DevFlow setup from rough notes.
 
-The user should not need to design JSON. You interview them, normalize messy
-information, write the repository's config/docs, and verify the existing
+The user should not need to design storage files. You interview them, normalize messy
+information, write DevFlow state/docs through the existing actions, and verify the existing
 DevFlow panel can display the result. Keep guiding until local profile,
 projects, scenes, skills, and rules are configured enough for routing and panel
 checks to work.
@@ -29,17 +29,14 @@ checks to work.
 - When offering examples, use generic labels such as "frontend app", "BFF/API",
   "iOS app", "backend service", "release scripts", or "AI workflow project".
 
-## Read First
+## Query First
 
-1. `config/entry.json`
-2. `config/profile.json`
-3. `runtime/current.json`
-4. `config/projects/index.json`
-5. `config/scenes/index.json`
-6. `config/skills/skills.json`
-7. `config/rules/rules.json`
+1. Run `devflow query current` to see whether onboarding or task state already exists.
+2. Run `devflow query route "@devflow:init <user request>"` before choosing project, scene, Workset, or task context.
+3. Run `devflow query skills` only when the user asks to inspect or mount skills.
+4. Run `devflow query rules` only when the user asks to inspect or mount rules.
 
-Do not bulk-read distributed project docs, `bundles/rules/**`, or `bundles/skills/**` until a selected project, scene, skill, or rule requires it.
+Do not bulk-read distributed project docs, `bundles/rules/**`, or `bundles/skills/**` until a query result selects the project, scene, skill, or rule source path.
 
 ## Interview Flow
 
@@ -151,36 +148,31 @@ Before writing files, normalize the conversation into this shape:
 
 ## Write Path
 
-Prefer the existing maintenance actions and scripts over hand-editing multiple files. These writes are driven by the `devflow` / `devflow-init` skill route, not by the panel UI:
+Prefer the existing maintenance actions and scripts over hand-editing multiple files:
 
-- Add project: call `add_project_from_path` or the equivalent script flow. It scans `.ai-configs/project.md`, lightweight AI entries, Cursor rules, and project-local skills/rules; registers project-local skills/rules as distributed sources; writes `config/projects/<id>.json`; updates `config/projects/index.json`; and adds lightweight managed entries in the project. If `.ai-configs` is missing, tell the user first and only create `.ai-configs/project.md` after confirmation.
+- Add project: use the panel action `add_project_from_path` or the equivalent backend action. It scans `.ai-configs/project.md`, lightweight AI entries, Cursor rules, and project-local skills/rules; registers project-local skills/rules as distributed sources; updates DevFlow project state; and adds lightweight managed entries in the project. If `.ai-configs` is missing, tell the user first and only create `.ai-configs/project.md` after confirmation.
 - Add scene: use `add_scene` with scene id/name, purpose, and mounted project ids.
 - Add skill: use `add_skill_from_path` when a `SKILL.md` path exists; otherwise register only after the user confirms the generated skill content.
 - Add rule: use `add_rule`; if no source file exists, provide `purpose` so the action can generate a rule template.
 
-When manual edits are unavoidable, update all affected files together:
+When manual edits are unavoidable, keep DevFlow repository state and distributed project files aligned:
 
-- `config/projects/index.json`
-- `config/projects/<project-id>.json`
 - the selected project's `.ai-configs/project.md`
 - the selected project's `.ai-configs/rules/` when adding project-local rules
 - the selected project's `.ai-configs/skills/` when adding project-local skills
-- `config/scenes/index.json`
-- `config/scenes/<scene-id>.json`
-- `config/skills/skills.json`
-- `config/rules/rules.json`
-- `bundles/skills/<skill-id>/SKILL.md`
-- `bundles/rules/<rule-id>.md`
+- DevFlow project, scene, skill, and rule state exposed through `devflow query route/current/skills/rules`
+- `bundles/skills/<skill-id>/SKILL.md` when adding a bundled skill
+- `bundles/rules/<rule-id>.md` when adding a bundled rule
 
 ## Panel Safety
 
-The panel reads JSON indexes and relationship arrays. It is for viewing and validation, not for adding or maintaining config. Before completion, verify:
+The panel reads the same DevFlow state exposed by query commands. Before completion, verify:
 
-- Every project index item points to an existing `config/projects/<id>.json`.
-- Every scene index item points to an existing `config/scenes/<id>.json`.
-- Project `skills`, `rules`, and `scenes` reference catalog/index ids that exist.
+- `devflow query route "<representative request>"` returns the expected project or scene.
+- `devflow query current` returns coherent task and Workset state when a task is active.
+- Project `skills`, `rules`, and `scenes` reference ids that exist.
 - Scene `projects` and `rules` reference existing project/rule ids.
-- Rule catalog entries have `sourcePath`, `applyMode`, non-empty `globs`, and `whenToRead`.
+- Rule entries have `sourcePath`, `applyMode`, non-empty `globs`, and `whenToRead`.
 
 ## Verification
 

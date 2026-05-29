@@ -15,32 +15,23 @@
   "doc": {
     "path": "README.md",
     "title": "DevFlow",
-    "summary": "Install DevFlow, then run devflow-init to configure local profile, projects, scenes, skills, and rules.",
+    "summary": "Install DevFlow, then run devflow-init to configure local profile, projects, skills, and rules.",
     "whenToRead": "Read after selecting the DevFlow project or when installing/configuring this repository."
   },
-  "scenes": [
-    {
-      "id": "devflow-config",
-      "name": "DevFlow configuration",
-      "summary": "Install, validate, and initialize DevFlow.",
-      "sourcePath": "config/entry.json",
-      "reason": "Core setup scene for a fresh DevFlow installation."
-    }
-  ],
   "skills": [
     {
       "id": "devflow",
       "name": "DevFlow",
-      "description": "Use when entering, installing, validating, or modifying DevFlow, or when routing tasks through project/scene/rule/skill JSON indexes.",
+      "description": "Use when entering, installing, validating, or modifying DevFlow, or when routing tasks through project, rule, skill, Workset, or task state.",
       "sourcePath": "bundles/skills/devflow/SKILL.md",
       "whenToLoad": "Load when installing, validating, or modifying DevFlow."
     },
     {
       "id": "devflow-init",
       "name": "devflow-init",
-      "description": "Use after installing DevFlow when the user needs first-time onboarding, personal AI preferences, project inventory, scene creation, skill/rule mounting, or migration from scattered notes into DevFlow JSON.",
+      "description": "Use after installing DevFlow when the user needs first-time onboarding, personal AI preferences, project inventory, skill/rule mounting, or migration from scattered notes into DevFlow state.",
       "sourcePath": "bundles/skills/devflow-init/SKILL.md",
-      "whenToLoad": "Load after install or when initializing profile, projects, scenes, skills, and rules from user-provided notes."
+      "whenToLoad": "Load after install or when initializing profile, projects, skills, and rules from user-provided notes."
     }
   ],
   "rules": [],

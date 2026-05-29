@@ -8,19 +8,38 @@ Portable project override:
 
 - This project entry is the DevFlow source of truth for this checkout.
 - Do not read or require home-level compatibility files by default.
-- If a parent/global instruction asks for those home files, treat this project entry and the JSON files below as the stronger, portable entry.
+- If a parent/global instruction asks for those home files, treat this project entry and DevFlow query results as the stronger, portable entry.
 
-Read first:
+Query first:
 
-1. `config/entry.json`
-2. `config/projects/devflow.json`
-3. `runtime/current.json`
+Use DevFlow query commands before loading project, task, skill, or rule context. Only load source Markdown, rules, or skills from returned readPaths, skills.sourcePath, or rules.sourcePath.
 
-Do not load all DevFlow Markdown by default. Follow the selected JSON indexes.
+On-demand DevFlow routing:
+
+- DevFlow is an on-demand capability set, not the default full workflow for every new chat.
+- Do not load all projects, scene templates, skills, rules, or task history by default.
+- For project/task/continue/scene template/Workset/skill/panel requests, run:
+`devflow query route "<user request>"`
+- Read only returned readPaths and skills.sourcePath.
+- For resume requests, run:
+`devflow query current`
+- For explicit skill inventory, run:
+`devflow query skills`
+- For explicit rule inventory, run:
+`devflow query rules`
+- If devflow query is unavailable, report that the SQLite/query migration is incomplete.
+- Classify the user's current request before loading extra DevFlow data:
+  - `none`: ordinary questions, explanations, or code snippets. Do not read DevFlow unless project context is explicitly needed.
+  - `resume`: continuing the current task or an existing task. Prefer `devflow query current` and read only the returned task, Workset, `nextAction`, and `recoveryPoint`.
+  - `light`: small bug or small change. Use minimal project/context lookup and light task tracking only when the work should survive the chat.
+  - `full`: large, cross-project, high-risk, Jira/Notion/Figma/PRD-backed work. Then use full task tracking, G1-G7, and OpenSpec when selected.
+- Do not start G1-G7 by default.
+- Use query results to choose the smallest useful context, then proceed with the active tool's normal execution workflow.
+
 
 Mounted skills:
 
-- devflow: Use when entering, installing, validating, or modifying DevFlow, or when routing tasks through project/scene/rule/skill JSON indexes.
-- devflow-init: Use after installing DevFlow when the user needs first-time onboarding, personal AI preferences, project inventory, scene creation, skill/rule mounting, or migration from scattered notes into DevFlow JSON.
+- devflow: Use when entering, installing, validating, or modifying DevFlow, or when routing tasks through project, scene-template, rule, skill, Workset, or task state.
+- devflow-init: Use after installing DevFlow when the user needs first-time onboarding, personal AI preferences, project inventory, scene-template creation, skill/rule mounting, or migration from scattered notes into DevFlow state.
 
 <!-- devflow:managed-entry:end -->

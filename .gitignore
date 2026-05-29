@@ -6,7 +6,13 @@
 # framework placeholder in master.
 runtime/tasks/*
 !runtime/tasks/.gitkeep
+runtime/backups/
+runtime/stale-migration-files/
+runtime/*.json
+!runtime/current.json
 runtime/current.local.json
+data/*.db
+data/*.db-*
 
 # Local project, scene, rule, skill, and registry data. The public/master branch
 # should remain a fresh DevFlow framework, not one machine's inventory.
@@ -43,6 +49,8 @@ registry/
 .codex/skills/
 .claude/skills/
 node_modules/
+apps/panel/node_modules/
+apps/panel/.vite/
 .playwright-mcp/
 .superpowers/
 .idea/

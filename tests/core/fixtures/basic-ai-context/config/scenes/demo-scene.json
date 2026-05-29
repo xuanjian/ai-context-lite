@@ -1,8 +1,28 @@
 {
   "version": 1,
   "id": "demo-scene",
+  "templateType": "scene-template",
   "name": "Demo Scene",
   "summary": "Demo scene detail summary.",
+  "capabilityIds": [
+    "task-routing"
+  ],
+  "projectHints": [
+    {
+      "id": "demo-project",
+      "role": "primary"
+    }
+  ],
+  "skillHints": [
+    {
+      "id": "demo-skill"
+    }
+  ],
+  "ruleHints": [
+    {
+      "id": "demo-rule"
+    }
+  ],
   "source": {
     "path": "docs/scenes/demo-scene.md"
   },

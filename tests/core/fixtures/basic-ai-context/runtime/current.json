@@ -2,6 +2,7 @@
   "version": 1,
   "activeTaskId": "demo-task",
   "activeTaskPath": "runtime/tasks/demo-task.json",
+  "activeWorksetId": "workset-demo-task",
   "activeProjectIds": [
     "demo-project"
   ],

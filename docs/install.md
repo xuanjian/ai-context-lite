@@ -6,11 +6,44 @@ This document is the clean-machine install path for the public DevFlow framework
 
 - Git.
 - npm.
-- Node.js 20.19.0 or newer. OpenSpec requires this Node version.
+- Node.js 20.19.0 or newer.
 - Codex or another AI coding tool that can read local skills.
-- Codex superpowers installed or restored under `~/.codex/superpowers`.
 
-`devflow init` installs OpenSpec automatically unless `--skip-openspec` is passed. [OpenSpec's official installation guide](https://github.com/Fission-AI/OpenSpec/blob/main/docs/installation.md) uses `npm install -g @fission-ai/openspec@latest` and verifies with `openspec --version`.
+## Optional Dependencies
+
+OpenSpec and superpowers are optional workflow layers. DevFlow should still
+initialize, route, and track tasks when either one is missing:
+
+- OpenSpec is only for L3/L4, PRD/Jira/Notion/Figma-backed, cross-project,
+  cross-device, or high-risk work that has selected a spec layer.
+- superpowers is only a registered skill family for optional execution
+  discipline. Registering superpowers makes individual skills discoverable; it
+  does not load them unless route text matches the skill's loading intent.
+
+`devflow init` checks or installs OpenSpec automatically unless
+`--skip-openspec` is passed. To avoid mutating global npm packages, run:
+
+```bash
+devflow init --skip-openspec
+```
+
+[OpenSpec's official installation guide](https://github.com/Fission-AI/OpenSpec/blob/main/docs/installation.md)
+uses `npm install -g @fission-ai/openspec@latest` and verifies with
+`openspec --version`. If `openspec --version` is missing, DevFlow reports a
+warning and full tasks skip the spec layer unless OpenSpec is later installed
+and selected.
+
+For superpowers, use the skill-directory shape that matches DevFlow skill
+links: place or link the superpowers skill directories under the selected AI
+tool's skill home, then register them from the local source path:
+
+```bash
+devflow add skill /path/to/superpowers/skills --family superpowers --scope global
+```
+
+If superpowers is not registered, DevFlow reports availability as missing where
+checked, but ordinary task routing continues and no superpowers skills are
+loaded.
 
 ## Fresh Install
 
@@ -56,8 +89,8 @@ devflow init --tools codex,claude-code,cursor
 
 - Validates the DevFlow skeleton.
 - Links the `DevFlow` and `devflow-init` skills into selected AI tool skill directories.
-- Installs OpenSpec with `npm install -g @fission-ai/openspec@latest` when it is missing.
-- Reports whether OpenSpec and superpowers are available.
+- Checks or installs OpenSpec with `npm install -g @fission-ai/openspec@latest` when it is missing, unless `--skip-openspec` is passed.
+- Reports whether optional OpenSpec and superpowers layers are available without blocking the core DevFlow setup.
 
 If you do not want the init command to mutate global npm packages:
 
