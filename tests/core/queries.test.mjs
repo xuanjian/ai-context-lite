@@ -64,6 +64,30 @@ test("querySkills and queryRules filter by project, template, and workset/task i
   assert.deepEqual((await service.queryRules({ worksetId: "workset-floating" })).rules.map((rule) => rule.id), ["floating-rule"]);
 });
 
+test("queryRoute surfaces global skills only when request text matches the skill loading intent", async () => {
+  const repository = createFakeRepository({
+    globalSkills: [
+      {
+        id: "test-driven-development",
+        scope: "global",
+        family: "superpowers",
+        whenToLoad: "Use when implementing feature work or bugfixes.",
+        sourcePath: "/external/superpowers/test-driven-development/SKILL.md"
+      }
+    ]
+  });
+  const service = createDevFlowService({ rootDir: "/tmp/devflow", repository });
+
+  const inventory = await service.querySkills({ projectId: "demo-project" });
+  const relevant = await service.queryRoute({ text: "implement feature in demo project" });
+  const unrelated = await service.queryRoute({ text: "write release note for demo project" });
+
+  assert.equal(inventory.skills.some((skill) => skill.id === "test-driven-development"), true);
+  assert.equal(relevant.skills.some((skill) => skill.id === "test-driven-development"), true);
+  assert.equal(relevant.readPaths.includes("/external/superpowers/test-driven-development/SKILL.md"), true);
+  assert.equal(unrelated.skills.some((skill) => skill.id === "test-driven-development"), false);
+});
+
 test("buildGraph returns repository graph edges with entity nodes", async () => {
   const repository = createFakeRepository();
   const service = createDevFlowService({ rootDir: "/tmp/devflow", repository });
@@ -166,7 +190,7 @@ function updateRawJson(db, table, id, update) {
   db.prepare(`UPDATE ${table} SET raw_json = ? WHERE id = ?`).run(JSON.stringify(update(JSON.parse(row.raw_json))), id);
 }
 
-function createFakeRepository() {
+function createFakeRepository({ globalSkills = [] } = {}) {
   const projects = [
     {
       id: "demo-project",
@@ -205,6 +229,7 @@ function createFakeRepository() {
       worksetIds: ["workset-demo-task"],
       sourcePath: "bundles/skills/demo/SKILL.md"
     },
+    ...globalSkills,
     { id: "floating-skill" },
     { id: "other-skill", projectIds: ["other-project"] }
   ];

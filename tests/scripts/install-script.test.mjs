@@ -131,7 +131,26 @@ test("doctor passes when core links, OpenSpec, and superpowers are available", (
   const doctor = runInstallScript(["doctor"], env);
   assert.equal(doctor.status, 0, doctor.stderr);
   assert.match(doctor.stdout, /ok OpenSpec CLI: openspec-test/);
-  assert.match(doctor.stdout, /ok Codex superpowers:/);
+  assert.match(doctor.stdout, /ok superpowers skills:/);
+  assert.match(doctor.stdout, /doctor passed/);
+});
+
+test("doctor treats missing OpenSpec as an optional warning", () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "devflow-doctor-no-openspec-home-"));
+  const skillsHome = fs.mkdtempSync(path.join(os.tmpdir(), "devflow-doctor-no-openspec-skills-"));
+  fs.mkdirSync(path.join(home, ".codex", "superpowers"), { recursive: true });
+  const env = {
+    HOME: home,
+    AI_CONTEXT_SKILLS_HOMES: skillsHome,
+    PATH: `/bin${path.delimiter}/usr/bin`
+  };
+
+  const setup = runInstallScript(["setup"], env);
+  assert.equal(setup.status, 0, setup.stderr);
+
+  const doctor = runInstallScript(["doctor"], env);
+  assert.equal(doctor.status, 0, doctor.stderr);
+  assert.match(doctor.stdout, /WARN OpenSpec CLI: missing/);
   assert.match(doctor.stdout, /doctor passed/);
 });
 

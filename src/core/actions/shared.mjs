@@ -66,18 +66,15 @@ export async function importSkillDirectory(rootPath, skillDir, options) {
   await fs.rm(targetDir, { recursive: true, force: true });
   await fs.mkdir(path.dirname(targetDir), { recursive: true });
   await fs.cp(skillDir, targetDir, { recursive: true });
-  const skill = {
+  const skill = buildSkillRecord({
+    ...options,
     id,
-    name: String(options.name || frontmatter.name || titleFromId(id)),
-    description: String(options.description || frontmatter.description || `Use when ${titleFromId(id)} is needed.`),
-    trigger: String(options.description || frontmatter.description || `Use when ${titleFromId(id)} is needed.`),
     sourcePath: `bundles/skills/${id}/SKILL.md`,
-    tags: uniqueSorted(listFromBody(options.tags)),
-    defaultSceneIds: listFromBody(options.sceneIds),
-    whenToLoad: String(options.description || frontmatter.description || `Use when ${titleFromId(id)} is needed.`),
+    name: options.name || frontmatter.name,
+    description: options.description || frontmatter.description,
     sourceExists: true,
     sourceType: "file"
-  };
+  });
   upsertById(options.catalog.skills, skill);
   return { skill, changedPaths: [`bundles/skills/${id}/SKILL.md`] };
 }
@@ -87,21 +84,49 @@ export async function registerExternalSkillDirectory(skillDir, options) {
   const frontmatter = readFrontmatter(await fs.readFile(skillFile, "utf8"));
   const id = normalizeId(options.id || frontmatter.name || path.basename(skillDir));
   if (!id) throw new Error("skill id is required");
-  const skill = {
+  const skill = buildSkillRecord({
+    ...options,
     id,
-    name: String(options.name || frontmatter.name || titleFromId(id)),
-    description: String(options.description || frontmatter.description || `Use when ${titleFromId(id)} is needed.`),
-    trigger: String(options.description || frontmatter.description || `Use when ${titleFromId(id)} is needed.`),
     sourcePath: skillFile,
-    sourceProjectId: options.sourceProjectId,
-    tags: uniqueSorted(listFromBody(options.tags)),
-    defaultSceneIds: listFromBody(options.sceneIds),
-    whenToLoad: String(options.description || frontmatter.description || `Use when ${titleFromId(id)} is needed.`),
+    name: options.name || frontmatter.name,
+    description: options.description || frontmatter.description,
     sourceExists: true,
     sourceType: "external-file"
-  };
+  });
   upsertById(options.catalog.skills, skill);
   return { skill, changedPaths: [] };
+}
+
+function buildSkillRecord(options) {
+  const family = normalizeId(options.family);
+  const idTag = normalizeId(options.id);
+  const tags = uniqueSorted([
+    ...listFromBody(options.tags),
+    family,
+    idTag,
+    acronymFromId(idTag)
+  ]);
+  const description = String(options.description || `Use when ${titleFromId(options.id)} is needed.`);
+  return {
+    id: options.id,
+    name: String(options.name || titleFromId(options.id)),
+    description,
+    trigger: String(options.trigger || description),
+    sourcePath: options.sourcePath,
+    sourceProjectId: options.sourceProjectId,
+    family,
+    scope: String(options.scope || "project"),
+    tags,
+    defaultSceneIds: listFromBody(options.sceneIds),
+    whenToLoad: String(options.whenToLoad || description),
+    sourceExists: options.sourceExists !== false,
+    sourceType: options.sourceType || "file"
+  };
+}
+
+function acronymFromId(id) {
+  const parts = String(id || "").split("-").filter(Boolean);
+  return parts.length > 1 ? parts.map((part) => part[0]).join("") : "";
 }
 
 export async function importRuleFile(rootPath, sourcePath, options) {

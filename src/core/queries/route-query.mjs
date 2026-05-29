@@ -20,7 +20,7 @@ export async function queryRoute(repository, { text = "" } = {}) {
     : await resolveProjects(repository, projects, sceneTemplate, sourceText);
   const templateId = sceneTemplate?.id;
   const projectIds = selectedProjects.map((project) => project.id).filter(Boolean);
-  const skills = (await querySkills(repository, { projectId: projectIds[0], templateId })).skills;
+  const skills = filterRouteSkills((await querySkills(repository, { projectId: projectIds[0], templateId })).skills, sourceText);
   const rules = (await queryRules(repository, { projectId: projectIds[0], templateId })).rules;
   const workset = sceneTemplate || selectedProjects.length > 0 ? normalizeWorkset({
     id: sceneTemplate?.id ? `workset-route-${sceneTemplate.id}` : "workset-route-ad-hoc",
@@ -153,6 +153,55 @@ function collectReadPaths({ sceneTemplate, projects, skills, rules }) {
     addPath(paths, rule.sourcePath);
   }
   return paths;
+}
+
+function filterRouteSkills(skills, sourceText) {
+  return skills.filter((skill) => skill.scope !== "global" || matchesGlobalSkillIntent(skill, sourceText));
+}
+
+function matchesGlobalSkillIntent(skill, sourceText) {
+  const requestTokens = routeSkillTokens(sourceText);
+  if (!requestTokens.length) return false;
+  const skillTokens = new Set(routeSkillTokens([
+    skill.id,
+    skill.name,
+    skill.description,
+    skill.trigger,
+    skill.whenToLoad,
+    skill.tags
+  ].flat(Infinity).filter(Boolean).join(" ")));
+  return requestTokens.some((token) => skillTokens.has(token));
+}
+
+function routeSkillTokens(value) {
+  const stopWords = new Set([
+    "and",
+    "for",
+    "from",
+    "into",
+    "the",
+    "this",
+    "that",
+    "use",
+    "when",
+    "with"
+  ]);
+  return normalizeText(value)
+    .replace(/[^a-z0-9\u4e00-\u9fff]+/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length > 2 && !stopWords.has(token))
+    .map(stemRouteSkillToken)
+    .filter(Boolean);
+}
+
+function stemRouteSkillToken(token) {
+  if (token.length > 5 && token.endsWith("ing")) {
+    const stem = token.slice(0, -3);
+    return stem.length > 2 && stem.at(-1) === stem.at(-2) ? stem.slice(0, -1) : stem;
+  }
+  if (token.length > 4 && token.endsWith("es")) return token.slice(0, -2);
+  if (token.length > 3 && token.endsWith("s")) return token.slice(0, -1);
+  return token;
 }
 
 function inferProjectCandidates({ projects, projectEdges, tasks, sourceText }) {

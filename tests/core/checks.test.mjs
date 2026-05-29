@@ -53,9 +53,26 @@ test("runChecks reports active task, graph references, script commands, skill li
     assert.equal(ids.has("install_command"), true);
     assert.equal(ids.has("install_check_command"), true);
     assert.equal(ids.has("install_validate_command"), true);
+    assert.equal(ids.has("openspec_cli"), true);
     assert.equal(ids.has("ai_context_skill_links"), true);
     assert.equal(ids.has("project_entry_sync_drift"), true);
   } finally {
+    await fs.rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("runChecks reports missing OpenSpec as a warning", async () => {
+  const rootDir = await copyFixture("basic-ai-context");
+  const originalPath = process.env.PATH;
+  process.env.PATH = `/bin${path.delimiter}/usr/bin`;
+  try {
+    const result = await runChecks({ rootDir, runCommands: false });
+    const openspec = result.checks.find((check) => check.id === "openspec_cli");
+
+    assert.equal(openspec.status, "warning");
+    assert.match(openspec.message, /OpenSpec CLI missing/);
+  } finally {
+    process.env.PATH = originalPath;
     await fs.rm(rootDir, { recursive: true, force: true });
   }
 });

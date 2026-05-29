@@ -95,3 +95,32 @@ test("add scene-template derives a template id from the name", async () => {
   assert.equal(result.action, "addSceneTemplate");
   assert.equal(result.entityId, "payment-debug");
 });
+
+test("add skill registers a batch skill directory with family and scope flags", async () => {
+  const root = copyFixture();
+  await seedSqliteFromJsonFixture(root);
+  const skillRoot = fs.mkdtempSync(path.join(os.tmpdir(), "devflow-cli-superpowers-"));
+  fs.mkdirSync(path.join(skillRoot, "test-driven-development"), { recursive: true });
+  fs.writeFileSync(
+    path.join(skillRoot, "test-driven-development", "SKILL.md"),
+    "---\nname: test-driven-development\ndescription: Use when implementing feature work or bugfixes.\n---\n# TDD\n"
+  );
+
+  const result = parseJson(runCli(root, [
+    "add",
+    "skill",
+    skillRoot,
+    "--family",
+    "superpowers",
+    "--scope",
+    "global"
+  ]));
+  const skills = parseJson(runCli(root, ["query", "skills"])).skills;
+  const tdd = skills.find((skill) => skill.id === "test-driven-development");
+
+  assert.equal(result.ok, true, result.error?.message);
+  assert.equal(tdd.family, "superpowers");
+  assert.equal(tdd.scope, "global");
+  assert.equal(tdd.sourcePath, path.join(skillRoot, "test-driven-development", "SKILL.md"));
+  assert.equal(fs.existsSync(path.join(root, "bundles/skills/test-driven-development/SKILL.md")), false);
+});

@@ -4,6 +4,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { probeOpenSpecCli } from '../src/core/openspec-probe.mjs';
 import { createSqliteRepository } from '../src/core/repositories/sqlite-repository.mjs';
 import { defaultDbPath } from '../src/core/storage/schema.mjs';
 import { ensureSqliteDatabase } from '../src/core/storage/sqlite-bootstrap.mjs';
@@ -179,14 +180,6 @@ function commandExists(command) {
     return true;
   } catch {
     return false;
-  }
-}
-
-function commandVersion(command) {
-  try {
-    return execFileSync(command, ['--version'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-  } catch {
-    return '';
   }
 }
 
@@ -565,8 +558,8 @@ function workflowToolStatuses() {
   const nodeMajor = Number(process.versions.node.split('.')[0] || 0);
   const nodeMinor = Number(process.versions.node.split('.')[1] || 0);
   const nodeOk = nodeMajor > 20 || nodeMajor === 20 && nodeMinor >= 19;
-  const openspecInstalled = commandExists('openspec');
-  const superpowersInstalled = fs.existsSync(superpowersDir);
+  const openspec = probeOpenSpecCli({ cwd: root });
+  const superpowers = superpowersSkillStatus();
   const installedLinks = skillLinks.filter(skillLink => fs.existsSync(skillLink.linkPath)
     && fs.lstatSync(skillLink.linkPath).isSymbolicLink()
     && (path.resolve(path.dirname(skillLink.linkPath), fs.readlinkSync(skillLink.linkPath)) === skillLink.sourcePath
@@ -589,19 +582,61 @@ function workflowToolStatuses() {
     },
     {
       id: 'openspec',
-      ok: openspecInstalled,
+      ok: openspec.ok,
+      optional: true,
       label: 'OpenSpec CLI',
-      detail: openspecInstalled ? commandVersion('openspec') || 'installed' : 'missing',
+      detail: openspec.detail,
       fix: 'Run: npm install -g @fission-ai/openspec@latest',
     },
     {
       id: 'superpowers',
-      ok: superpowersInstalled,
-      label: 'Codex superpowers',
-      detail: superpowersInstalled ? superpowersDir : 'missing',
-      fix: 'Install or restore Codex superpowers so ~/.codex/superpowers exists.',
+      ok: superpowers.ok,
+      optional: true,
+      label: 'superpowers skills',
+      detail: superpowers.detail,
+      fix: 'Place or link superpowers skill directories into the selected AI tool skill home, then run: devflow add skill <superpowers-root> --family superpowers --scope global',
     },
   ];
+}
+
+function superpowersSkillStatus() {
+  const skillDirs = [];
+  for (const skillsHome of skillsHomes) {
+    if (!fs.existsSync(skillsHome)) continue;
+    for (const entry of fs.readdirSync(skillsHome, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const skillFile = path.join(skillsHome, entry.name, 'SKILL.md');
+      if (fs.existsSync(skillFile) && isLikelySuperpowersSkill(entry.name)) {
+        skillDirs.push(skillFile);
+      }
+    }
+  }
+  if (skillDirs.length) {
+    return { ok: true, detail: `${skillDirs.length} skill director${skillDirs.length === 1 ? 'y' : 'ies'} in selected skill homes` };
+  }
+  if (fs.existsSync(superpowersDir)) {
+    return { ok: true, detail: `${superpowersDir} (legacy source directory)` };
+  }
+  return { ok: false, detail: 'missing' };
+}
+
+function isLikelySuperpowersSkill(name) {
+  return new Set([
+    'brainstorming',
+    'dispatching-parallel-agents',
+    'executing-plans',
+    'finishing-a-development-branch',
+    'receiving-code-review',
+    'requesting-code-review',
+    'subagent-driven-development',
+    'systematic-debugging',
+    'test-driven-development',
+    'using-git-worktrees',
+    'using-superpowers',
+    'verification-before-completion',
+    'writing-plans',
+    'writing-skills'
+  ]).has(name);
 }
 
 function ensureOpenSpecInstalled() {
@@ -615,7 +650,8 @@ function ensureOpenSpecInstalled() {
 
 function printWorkflowToolReport(statuses, { strict = false } = {}) {
   for (const status of statuses) {
-    console.log(`${status.ok ? 'ok' : strict ? 'ERROR' : 'WARN'} ${status.label}: ${status.detail}`);
+    const level = status.ok ? 'ok' : (status.optional || !strict) ? 'WARN' : 'ERROR';
+    console.log(`${level} ${status.label}: ${status.detail}`);
     if (!status.ok) console.log(`  fix: ${status.fix}`);
   }
 }
@@ -637,7 +673,7 @@ export async function doctor(options = {}) {
     await checkCurrent();
     const statuses = workflowToolStatuses();
     printWorkflowToolReport(statuses, { strict: true });
-    const failed = statuses.filter(status => !status.ok);
+    const failed = statuses.filter(status => !status.ok && !status.optional);
     if (failed.length) {
       throw new Error(`doctor failed: ${failed.map(status => status.id).join(', ')}`);
     }
@@ -688,6 +724,8 @@ async function checkCurrent() {
         || path.resolve(fs.readlinkSync(skillLink.linkPath)) === skillLink.sourcePath);
     console.log(`skill link ${skillLink.linkPath}: ${installed ? 'ok' : 'missing'}`);
   }
+  const openspec = probeOpenSpecCli({ cwd: root });
+  console.log(`OpenSpec CLI: ${openspec.ok ? openspec.detail : 'missing (optional; full tasks skip spec layer)'}`);
 }
 
 export async function syncProjects(options = {}) {

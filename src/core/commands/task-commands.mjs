@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { normalizeCommandResult, normalizeWorkset } from "../contracts/devflow-types.mjs";
+import { formatTaskSpecLine, mergeTaskSpec, normalizeTaskSpec } from "../task-spec.mjs";
 
 export async function startTask(repository, input = {}) {
   const taskId = input.taskId || slugify(input.title || "task");
@@ -27,6 +28,7 @@ export async function startTask(repository, input = {}) {
     note: input.note || "",
     nextAction: input.nextAction || "",
     recoveryPoint: input.recoveryPoint || "",
+    spec: normalizeTaskSpec(input.spec),
     workset,
     paths: {
       handoff: handoffPath
@@ -71,6 +73,7 @@ export async function updateTask(repository, input = {}) {
     gate: input.gate || task.gate,
     currentGate: input.gate || task.currentGate || task.gate || "",
     recoveryPoint: input.recoveryPoint || task.recoveryPoint || "",
+    spec: mergeTaskSpec(task.spec, input.spec),
     notes: appendNote(task.notes, input.note)
   };
   await repository.writeTask(nextTask);
@@ -200,6 +203,7 @@ async function writeHandoff(rootDir, task, lines = []) {
     `Task: ${task.id}`,
     task.workset?.id ? `Workset: ${task.workset.id}` : "",
     task.workset?.sceneTemplateId ? `Scene Template: ${task.workset.sceneTemplateId}` : "",
+    formatTaskSpecLine(task.spec),
     task.recoveryPoint ? `Recovery: ${task.recoveryPoint}` : "",
     "",
     ...lines

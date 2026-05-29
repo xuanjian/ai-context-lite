@@ -1,3 +1,4 @@
+import fs from "node:fs/promises";
 import path from "node:path";
 import {
   actionCommands,
@@ -8,6 +9,7 @@ import {
   loadProjectsByIdsFromStore,
   makeSkillMount,
   normalizeId,
+  registerExternalSkillDirectory,
   removeGeneratedSource,
   removeProjectMountInStore,
   resolveSkillDir,
@@ -26,26 +28,69 @@ export async function addSkillFromPath({ rootPath, actionId, body }) {
     return actionError(actionId, "invalid_skill_path", "新增技能需要填写 skill 路径。");
   }
   const skillDir = await resolveSkillDir(skillPath);
-  if (!skillDir) {
+  const batchSkillDirs = skillDir ? [] : await listChildSkillDirs(skillPath);
+  const skillDirs = skillDir ? [skillDir] : batchSkillDirs;
+  if (!skillDirs.length) {
     return actionError(actionId, "invalid_skill_path", `未找到 SKILL.md: ${skillPath}`);
   }
   const skillCatalog = { version: 1, skills: await commands.listSkills() };
-  const imported = await importSkillDirectory(rootPath, skillDir, {
-    id: normalizeId(body?.skillId || path.basename(skillDir)),
-    name: body?.name,
-    description: body?.description,
-    projectIds: listFromBody(body?.projectIds),
-    catalog: skillCatalog
-  });
-  await commands.writeSkill(imported.skill);
-  imported.changedPaths.push("data/devflow.db");
+  const family = normalizeId(body?.family);
+  const scope = body?.scope ? String(body.scope).trim() : undefined;
+  const tags = [...listFromBody(body?.tags), family].filter(Boolean);
+  const isBatch = batchSkillDirs.length > 0;
+  const registerExternal = isBatch || family === "superpowers";
+  const importedSkills = [];
+  const changedPaths = [];
+  for (const dir of skillDirs) {
+    const importOptions = {
+      id: isBatch ? undefined : normalizeId(body?.skillId || path.basename(dir)),
+      name: isBatch ? undefined : body?.name,
+      description: isBatch ? undefined : body?.description,
+      projectIds: listFromBody(body?.projectIds),
+      family,
+      scope,
+      tags,
+      catalog: skillCatalog
+    };
+    const imported = registerExternal
+      ? await registerExternalSkillDirectory(dir, importOptions)
+      : await importSkillDirectory(rootPath, dir, importOptions);
+    await commands.writeSkill(imported.skill);
+    importedSkills.push(imported.skill);
+    changedPaths.push(...imported.changedPaths);
+  }
+  changedPaths.push("data/devflow.db");
   const projects = await loadProjectsByIdsFromStore(commands, listFromBody(body?.projectIds));
   for (const project of projects) {
     project.skills = project.skills || [];
-    upsertById(project.skills, makeSkillMount(imported.skill));
+    for (const skill of importedSkills) {
+      upsertById(project.skills, makeSkillMount(skill));
+    }
     await commands.writeProject(project);
   }
-  return actionOk(actionId, `新增技能 ${imported.skill.name}，已挂载 ${projects.length} 个项目。`, imported.changedPaths);
+  const label = importedSkills.length === 1 ? importedSkills[0].name : `${importedSkills.length} 个技能`;
+  return actionOk(actionId, `新增技能 ${label}，已挂载 ${projects.length} 个项目。`, changedPaths);
+}
+
+async function listChildSkillDirs(parentPath) {
+  let entries;
+  try {
+    entries = await fs.readdir(parentPath, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const skillDirs = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const candidate = path.join(parentPath, entry.name);
+    try {
+      await fs.access(path.join(candidate, "SKILL.md"));
+      skillDirs.push(candidate);
+    } catch {
+      // Non-skill subdirectories are ignored by batch registration.
+    }
+  }
+  return skillDirs.sort((a, b) => a.localeCompare(b));
 }
 
 export async function deleteSkill({ rootPath, actionId, body }) {

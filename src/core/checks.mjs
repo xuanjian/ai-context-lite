@@ -7,6 +7,7 @@ import { buildPanelGraph } from "./panel-graph.mjs";
 import { createSqliteRepository } from "./repositories/sqlite-repository.mjs";
 import { defaultDbPath } from "./storage/schema.mjs";
 import { ensureSqliteDatabase } from "./storage/sqlite-bootstrap.mjs";
+import { openSpecCliCheck } from "./openspec-probe.mjs";
 
 export async function runChecks({ rootDir = process.cwd(), runCommands = true } = {}) {
   const rootPath = toPath(rootDir);
@@ -77,6 +78,7 @@ export async function runChecks({ rootDir = process.cwd(), runCommands = true } 
   }));
   checks.push(await commandCheck(rootPath, "install_check_command", "Install check command", ["node", "scripts/install-ai-context.mjs", "check"], runCommands));
   checks.push(await commandCheck(rootPath, "install_validate_command", "Install validate command", ["node", "scripts/install-ai-context.mjs", "validate"], runCommands));
+  checks.push(openSpecCliCheck({ cwd: rootPath }));
   checks.push(await skillLinksCheck(rootPath, entry));
   checks.push(await commandCheck(rootPath, "project_entry_sync_drift", "Project entry sync drift", ["node", "scripts/install-ai-context.mjs", "sync-projects"], runCommands));
 

@@ -58,7 +58,7 @@ These are sub-intent routes of one DevFlow skill.
 - `@devflow:panel`: open, explain, or validate the local task/project panel.
 - `@devflow:init`: first-time onboarding after installation.
 
-Use specialist skills only when the selected route needs them. For example, authoring a new `SKILL.md` should also use `superpowers:writing-skills`.
+Use specialist skills only when the selected route needs them. For example, when superpowers has been registered, authoring a new `SKILL.md` should also use `superpowers:writing-skills`.
 
 ## `@devflow:add`
 

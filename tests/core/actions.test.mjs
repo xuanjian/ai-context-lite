@@ -232,6 +232,46 @@ test("add_skill_from_path copies skill and mounts it to selected projects", asyn
   assert.ok(project.skills.some((item) => item.id === "qa-helper"));
 });
 
+test("add_skill_from_path registers batch skill directories with family and global scope without vendoring", async () => {
+  const rootDir = await copyFixture();
+  const superpowersRoot = await fs.mkdtemp(path.join(os.tmpdir(), "superpowers-skills-"));
+  await fs.mkdir(path.join(superpowersRoot, "test-driven-development"), { recursive: true });
+  await fs.mkdir(path.join(superpowersRoot, "writing-plans"), { recursive: true });
+  await fs.writeFile(
+    path.join(superpowersRoot, "test-driven-development", "SKILL.md"),
+    "---\nname: test-driven-development\ndescription: Use when implementing feature work or bugfixes.\n---\n# TDD\n",
+    "utf8"
+  );
+  await fs.writeFile(
+    path.join(superpowersRoot, "writing-plans", "SKILL.md"),
+    "---\nname: writing-plans\ndescription: Use when writing implementation plans.\n---\n# Writing Plans\n",
+    "utf8"
+  );
+
+  const result = await runAction({
+    rootDir,
+    actionId: "add_skill_from_path",
+    body: { skillPath: superpowersRoot, family: "superpowers", scope: "global" }
+  });
+
+  assert.equal(result.ok, true, result.error?.message);
+  assert.ok(result.changedPaths.includes("data/devflow.db"));
+  assert.equal(result.changedPaths.some((item) => item.startsWith("bundles/skills/test-driven-development")), false);
+  const skills = await createSqliteRepository({ rootDir }).listSkills();
+  const tdd = skills.find((skill) => skill.id === "test-driven-development");
+  const plans = skills.find((skill) => skill.id === "writing-plans");
+  assert.equal(tdd.family, "superpowers");
+  assert.equal(tdd.scope, "global");
+  assert.equal(tdd.sourcePath, path.join(superpowersRoot, "test-driven-development", "SKILL.md"));
+  assert.equal(tdd.sourceType, "external-file");
+  assert.ok(tdd.tags.includes("superpowers"));
+  assert.ok(tdd.tags.includes("test-driven-development"));
+  assert.ok(tdd.tags.includes("tdd"));
+  assert.equal(plans.family, "superpowers");
+  assert.equal(plans.scope, "global");
+  assert.equal(await exists(path.join(rootDir, "bundles/skills/test-driven-development/SKILL.md")), false);
+});
+
 test("add_rule creates a rule file and mounts project plus scene relationships", async () => {
   const rootDir = await copyFixture();
 

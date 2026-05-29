@@ -1,3 +1,5 @@
+import { normalizeTaskSpec } from "../task-spec.mjs";
+
 export async function queryCurrent(repository) {
   const task = await repository.getActiveTask();
   if (!task) {
@@ -12,9 +14,13 @@ export async function queryCurrent(repository) {
 
   const worksetId = task.workset?.id || task.worksetId || task.id;
   const workset = task.workset || await repository.getWorkset(worksetId);
+  const currentTask = {
+    ...task,
+    spec: normalizeTaskSpec(task.spec)
+  };
   return {
     type: "current",
-    task,
+    task: currentTask,
     workset,
     nextAction: task.nextAction || "",
     recoveryPoint: task.recoveryPoint || ""
@@ -104,6 +110,9 @@ function filterContextItems(items, { projectId, templateId, worksetId, workset, 
   const effectiveProjectIds = new Set([projectId, ...worksetProjectIds].filter(Boolean));
 
   return items.filter((item) => {
+    if (itemType === "skills" && item.scope === "global") {
+      return true;
+    }
     if (relatedItemIds?.has(item.id)) {
       return true;
     }

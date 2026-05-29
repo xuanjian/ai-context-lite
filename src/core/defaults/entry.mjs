@@ -64,14 +64,19 @@ export const DEFAULT_ENTRY = {
     "workflowDependencies": [
       {
         "id": "openspec",
+        "optional": true,
         "purpose": "Optional spec-driven source of truth for L3/L4, Jira/Notion/Figma/PRD-backed, cross-project, cross-device, or high-risk tasks.",
         "install": "npm install -g @fission-ai/openspec@latest",
-        "verify": "openspec --version"
+        "verify": "openspec --version",
+        "missingBehavior": "Warn only; DevFlow continues and full tasks skip the spec layer unless OpenSpec is selected and available."
       },
       {
         "id": "superpowers",
-        "purpose": "Execution discipline layer for brainstorming, TDD, debugging, planning, verification, review, and branch finishing.",
-        "verify": "~/.codex/superpowers exists"
+        "optional": true,
+        "purpose": "Optional execution discipline layer for brainstorming, TDD, debugging, planning, verification, review, and branch finishing.",
+        "install": "Place or link superpowers skill directories into the selected AI tool skill home, then register them with `devflow add skill <superpowers-root> --family superpowers --scope global`.",
+        "verify": "devflow query skills shows registered superpowers skills, or the selected skill home contains superpowers skill directories with SKILL.md files.",
+        "missingBehavior": "Warn only; DevFlow continues and skips superpowers routing when no matching global skills are registered."
       }
     ],
     "skillLinks": [

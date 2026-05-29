@@ -4,6 +4,7 @@ import path from 'node:path';
 import process from 'node:process';
 import readline from 'node:readline';
 import { setup as setupAiContext } from './install-ai-context.mjs';
+import { openSpecMissingWarning } from '../src/core/openspec-probe.mjs';
 import {
   normalizeCommandResult,
 } from '../src/core/contracts/devflow-types.mjs';
@@ -39,8 +40,8 @@ function usage() {
   devflow restore-from-git [--ref <ref>] [--dry-run]
   devflow import-tasks [--dry-run]
   devflow task current
-  devflow task start "<title>" --project <id> --template <id>
-  devflow task update <task-id> --gate <G1-G7> --note "<progress>"
+  devflow task start "<title>" --project <id> --template <id> [--spec-change <id>] [--spec-path <path>] [--spec-status <status>] [--spec-handoff <summary>]
+  devflow task update <task-id> --gate <G1-G7> --note "<progress>" [--spec-change <id>] [--spec-path <path>] [--spec-status <status>] [--spec-handoff <summary>]
   devflow set-products <projectId> <product...> [--dry-run]
   devflow set-domain <projectId> <domain...> [--dry-run]
   devflow set-role <projectId> <role> [--dry-run]
@@ -49,6 +50,7 @@ function usage() {
   devflow scan-relations [--dry-run]
   devflow add project <repo-path>
   devflow add scene-template "<name>"
+  devflow add skill <skill-path> [--family <family>] [--scope <scope>]
   devflow doctor
   devflow index rebuild (deprecated noop)
 
@@ -379,6 +381,16 @@ function firstValue(...values) {
   return values.find(value => value && value !== true);
 }
 
+function specFromFlags(flags) {
+  const entries = [
+    ['changeId', firstValue(flags['spec-change'], flags.specChange)],
+    ['path', firstValue(flags['spec-path'], flags.specPath)],
+    ['status', firstValue(flags['spec-status'], flags.specStatus)],
+    ['handoff', firstValue(flags['spec-handoff'], flags.specHandoff)]
+  ].filter(([, value]) => value !== undefined);
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
 async function runFacadeCommand(root, command, type, rest, flags) {
   const service = await createService(root);
   if (command === 'status') {
@@ -455,6 +467,7 @@ async function runFacadeCommand(root, command, type, rest, flags) {
       gate: firstValue(flags.gate),
       level: firstValue(flags.level),
       note: firstValue(flags.note),
+      spec: specFromFlags(flags),
     }));
     return;
   }
@@ -464,6 +477,7 @@ async function runFacadeCommand(root, command, type, rest, flags) {
       gate: firstValue(flags.gate),
       note: firstValue(flags.note),
       recoveryPoint: firstValue(flags.recovery, flags.recoveryPoint),
+      spec: specFromFlags(flags),
     }));
     return;
   }
@@ -549,9 +563,28 @@ async function runFacadeCommand(root, command, type, rest, flags) {
     }));
     return;
   }
+  if (command === 'add' && type === 'skill') {
+    const module = await import('../src/core/actions.mjs');
+    printJson(await module.runAction({
+      rootDir: root,
+      actionId: 'add_skill_from_path',
+      body: {
+        skillPath: firstValue(flags.path) || rest[0],
+        skillId: firstValue(flags.id, flags.skillId),
+        name: firstValue(flags.name),
+        description: firstValue(flags.description),
+        projectIds: uniqueStable([...listFromFlag(flags.project), ...listFromFlag(flags.projects)]),
+        family: firstValue(flags.family),
+        scope: firstValue(flags.scope),
+        tags: listFromFlag(flags.tags)
+      }
+    }));
+    return;
+  }
   if (command === 'doctor') {
     const dbPath = path.join(root, 'data/devflow.db');
     const module = await import('../src/core/storage/sqlite-bootstrap.mjs');
+    const warnings = [openSpecMissingWarning({ cwd: root })].filter(Boolean);
     try {
       const ensured = await module.ensureSqliteDatabase({ rootDir: root, dbPath });
       const created = ensured.status === 'created';
@@ -561,7 +594,7 @@ async function runFacadeCommand(root, command, type, rest, flags) {
         entityType: undefined,
         message: created ? 'DevFlow SQLite database created from bundled defaults.' : 'DevFlow SQLite database is available.',
         paths: ['data/devflow.db'],
-        warnings: []
+        warnings
       }));
     } catch (error) {
       printJson(normalizeCommandResult({
@@ -570,7 +603,7 @@ async function runFacadeCommand(root, command, type, rest, flags) {
         entityType: undefined,
         message: `${error.message} Run devflow migrate from-json, then retry.`,
         paths: fs.existsSync(dbPath) ? ['data/devflow.db'] : [],
-        warnings: [{ code: 'missing_sqlite_database_json_sources', command: 'devflow migrate from-json' }]
+        warnings: [{ code: 'missing_sqlite_database_json_sources', command: 'devflow migrate from-json' }, ...warnings]
       }));
     }
     return;
