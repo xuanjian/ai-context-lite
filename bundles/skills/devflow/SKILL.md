@@ -19,6 +19,24 @@ Before loading DevFlow data, classify the request:
 Do not start G1-G7 by default.
 Do not load all projects, scene templates, skills, rules, or task history by default.
 
+## Levels and Gates
+
+The request tier (none/light/full) drives both tracking depth and which gates apply. Do not run the full G1-G7 ladder on every task.
+
+| Request tier | Task tracking | Gates | Engine |
+| --- | --- | --- | --- |
+| none | no task | none | just do it (zero orchestration) |
+| light | light tracking | light gates `G1 -> G3 -> G7` | bug-fix workflow / normal dev |
+| full | full tracking | `G1-G7`, advance on demand (not all 7 required) | multi-model-pipeline |
+
+Light gates are 3 stops; they skip full's G2/G4/G5/G6:
+
+- `G1` Intake: know what to change, or reproduce the bug and find the root cause (not a symptom).
+- `G3` Implement: fix this one spot, it compiles, the change stays minimal.
+- `G7` Acceptance: regression passes, no new regressions.
+
+The task `level` field stores `L1-L4`. Map to tier: `L1-L2` = light, `L3-L4` = full. Set it with `--level` on `task start` or `task update`. A task too small to track (for example a copy tweak) needs no task and no gate.
+
 ## Query-First Routing
 
 For project/task/continue/scene template/Workset/skill/panel requests, run:
@@ -118,7 +136,7 @@ devflow query current
 devflow query skills
 devflow query rules
 devflow task start "<title>" --project <id> --template <scene-template-id> --gate G1 --level <L1-L4>
-devflow task update <task-id> --gate <G1-G7> --note "<progress or decision>"
+devflow task update <task-id> [--gate <G1-G7>] [--level <L1-L4>] --note "<progress or decision>"
 devflow task finish <task-id> --note "<verification and handoff>"
 devflow add project <repo-path>
 ```

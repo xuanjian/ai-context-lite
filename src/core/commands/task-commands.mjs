@@ -72,6 +72,8 @@ export async function updateTask(repository, input = {}) {
     ...task,
     gate: input.gate || task.gate,
     currentGate: input.gate || task.currentGate || task.gate || "",
+    level: input.level || task.level || task.taskLevel || "",
+    taskLevel: input.level || task.taskLevel || task.level || "",
     recoveryPoint: input.recoveryPoint || task.recoveryPoint || "",
     spec: mergeTaskSpec(task.spec, input.spec),
     notes: appendNote(task.notes, input.note)

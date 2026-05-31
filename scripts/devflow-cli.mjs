@@ -40,8 +40,9 @@ function usage() {
   devflow restore-from-git [--ref <ref>] [--dry-run]
   devflow import-tasks [--dry-run]
   devflow task current
-  devflow task start "<title>" --project <id> --template <id> [--spec-change <id>] [--spec-path <path>] [--spec-status <status>] [--spec-handoff <summary>]
-  devflow task update <task-id> --gate <G1-G7> --note "<progress>" [--spec-change <id>] [--spec-path <path>] [--spec-status <status>] [--spec-handoff <summary>]
+  devflow task start "<title>" --project <id> --template <id> [--gate <G1-G7>] [--level <L1-L4>] [--spec-change <id>] [--spec-path <path>] [--spec-status <status>] [--spec-handoff <summary>]
+  devflow task update <task-id> [--gate <G1-G7>] [--level <L1-L4>] --note "<progress>" [--spec-change <id>] [--spec-path <path>] [--spec-status <status>] [--spec-handoff <summary>]
+  devflow task finish <task-id> --note "<verification and handoff>"
   devflow set-products <projectId> <product...> [--dry-run]
   devflow set-domain <projectId> <domain...> [--dry-run]
   devflow set-role <projectId> <role> [--dry-run]
@@ -475,6 +476,7 @@ async function runFacadeCommand(root, command, type, rest, flags) {
     printJson(await service.updateTask({
       taskId: rest[0],
       gate: firstValue(flags.gate),
+      level: firstValue(flags.level),
       note: firstValue(flags.note),
       recoveryPoint: firstValue(flags.recovery, flags.recoveryPoint),
       spec: specFromFlags(flags),

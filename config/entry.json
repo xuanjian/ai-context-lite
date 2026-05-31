@@ -115,13 +115,13 @@
     }
   },
   "taskFlow": {
-    "currentPointer": "runtime/current.json",
-    "activeTaskPattern": "runtime/tasks/<task-id>.json",
+    "currentPointer": "SQLite runtime_state (key=current); runtime/current.json is a legacy export, not the source of truth",
+    "activeTaskState": "SQLite tasks table; per-task handoff at runtime/tasks/<task-id>/handoff.md",
     "gatesPath": "config/tasks/gates.json",
-    "defaultBehavior": "Fresh install has no active task. Create task JSON only when the user starts work that should survive the chat.",
+    "defaultBehavior": "Fresh install has no active task. Create task state only when the user starts work that should survive the chat.",
     "commands": [
       "devflow task start \"<title>\" --project <id> --template <scene-template-id> --gate G1 --level <L1-L4>",
-      "devflow task update <task-id> --gate <G1-G7> --note \"<progress or decision>\"",
+      "devflow task update <task-id> [--gate <G1-G7>] [--level <L1-L4>] --note \"<progress or decision>\"",
       "devflow task finish <task-id> --note \"<verification and handoff>\""
     ],
     "specLayer": {
