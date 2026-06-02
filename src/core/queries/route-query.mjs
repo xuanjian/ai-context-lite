@@ -4,6 +4,8 @@ import {
   normalizeWorkset
 } from "../contracts/devflow-types.mjs";
 import { queryRules, querySkills } from "./current-query.mjs";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 
 export async function queryRoute(repository, { text = "" } = {}) {
   const sourceText = String(text || "");
@@ -145,6 +147,7 @@ function collectReadPaths({ sceneTemplate, projects, skills, rules }) {
   for (const project of projects) {
     addPath(paths, project.sourcePath || (project.id ? `config/projects/${project.id}.json` : ""));
     addPath(paths, project.doc?.path);
+    addPath(paths, resolveProjectParadigmPath(project));
   }
   for (const skill of skills) {
     addPath(paths, skill.sourcePath);
@@ -153,6 +156,15 @@ function collectReadPaths({ sceneTemplate, projects, skills, rules }) {
     addPath(paths, rule.sourcePath);
   }
   return paths;
+}
+
+// 项目仓库内的开发范式报告(<repo>/.ai-configs/paradigm.md)：存在即随路由带出，
+// 让"改这个项目代码前先读范式报告"自动闭环，不必每次重新勘探。
+function resolveProjectParadigmPath(project) {
+  const base = project?.path;
+  if (!base) return "";
+  const candidate = join(base, ".ai-configs", "paradigm.md");
+  return existsSync(candidate) ? candidate : "";
 }
 
 function filterRouteSkills(skills, sourceText) {

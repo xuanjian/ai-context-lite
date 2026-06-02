@@ -33,6 +33,43 @@ test("queryRoute returns the locked route shape with workset and readPaths", asy
   assert.match(route.nextAction, /Inspect selected project context/i);
 });
 
+test("queryRoute surfaces the project paradigm report when <repo>/.ai-configs/paradigm.md exists", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "devflow-paradigm-"));
+  try {
+    fs.mkdirSync(path.join(dir, ".ai-configs"), { recursive: true });
+    fs.writeFileSync(path.join(dir, ".ai-configs", "paradigm.md"), "# test paradigm\n");
+    const repository = createFakeRepository({ demoProjectPath: dir });
+    const service = createDevFlowService({ rootDir: "/tmp/devflow", repository });
+
+    const route = await service.queryRoute({ text: "修 demo project" });
+
+    const expected = path.join(dir, ".ai-configs", "paradigm.md");
+    assert.ok(
+      route.readPaths.includes(expected),
+      `expected readPaths to include ${expected}, got ${JSON.stringify(route.readPaths)}`
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("queryRoute omits the paradigm report when the file is absent and never errors", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "devflow-no-paradigm-"));
+  try {
+    const repository = createFakeRepository({ demoProjectPath: dir });
+    const service = createDevFlowService({ rootDir: "/tmp/devflow", repository });
+
+    const route = await service.queryRoute({ text: "修 demo project" });
+
+    assert.ok(
+      !route.readPaths.some((readPath) => readPath.includes("paradigm.md")),
+      `expected no paradigm.md in readPaths, got ${JSON.stringify(route.readPaths)}`
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("queryCurrent recovers active task, workset, nextAction, and recoveryPoint", async () => {
   const repository = createFakeRepository();
   const service = createDevFlowService({ rootDir: "/tmp/devflow", repository });
@@ -190,13 +227,13 @@ function updateRawJson(db, table, id, update) {
   db.prepare(`UPDATE ${table} SET raw_json = ? WHERE id = ?`).run(JSON.stringify(update(JSON.parse(row.raw_json))), id);
 }
 
-function createFakeRepository({ globalSkills = [] } = {}) {
+function createFakeRepository({ globalSkills = [], demoProjectPath = "." } = {}) {
   const projects = [
     {
       id: "demo-project",
       name: "Demo Project",
       summary: "Demo project for routing.",
-      path: ".",
+      path: demoProjectPath,
       sourcePath: "config/projects/demo-project.json",
       doc: { path: "README.md" }
     },
