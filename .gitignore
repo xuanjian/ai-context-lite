@@ -33,6 +33,8 @@ bundles/skills/*
 !bundles/skills/devflow/**
 !bundles/skills/devflow-init/
 !bundles/skills/devflow-init/**
+!bundles/skills/devflow-pm/
+!bundles/skills/devflow-pm/**
 
 docs/person/
 docs/repos/
@@ -41,6 +43,7 @@ docs/reference/
 docs/superpowers/
 docs/prototypes/
 docs/templates/
+docs/local/
 
 registry/
 

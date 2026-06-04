@@ -162,6 +162,32 @@ npm run dev
 
 面板是观察层，不是新增配置的主入口。新增项目、规则、技能优先通过 AI 聊天里的 `@devflow:add`。
 
+## PM 编排模式（可选）
+
+把**当前这个对话**锁成 PM（编排者）：能读码、能写 `.md` 任务文档、能跑 `git` 合并，但**一调 `Edit`/`Write`/`MultiEdit` 改源码就被硬拦**。改码活打成任务派给开发 agent（codex 子会话 / multi-model-pipeline / 新开发会话），PM 只收报告、跟你验收。
+
+解决的痛点：在编排对话里随手报个 bug，模型会自己去读码改码，上下文暴涨，而且「改过一次就一直自己改」。PM 模式用 **hook 在工具层硬拦**源码改动——不靠模型自觉，模型漂不漂都拦得住，自然会去派发。
+
+触发（按**当前工作目录**绑定，只影响这个目录的会话）：
+
+```text
+/devflow-pm           # 开启
+/devflow-pm off       # 关闭（想亲自改码时显式退出）
+/devflow-pm status    # 查看状态
+```
+
+一次性安装（注册 guard / reminder 两个 hook，**装完需重启会话才生效**）：
+
+```bash
+bash bundles/hooks/install-pm-hooks.sh            # 在 DevFlow 安装目录下运行
+bash bundles/hooks/install-pm-hooks.sh status     # 查看是否已注册
+bash bundles/hooks/install-pm-hooks.sh uninstall  # 卸载
+```
+
+安装器把版本化的 hook 脚本 symlink 到 `~/.claude/devflow-pm/hooks/`（稳定的 `$HOME` 位置），再幂等合并进 `~/.claude/settings.json`（改动前自动备份）。仓库里不写死任何绝对路径。
+
+> 边界：hook 只拦文件改写类工具，不拦 `Bash`；合并冲突要手改源码会被拦（按设计派发，或先 `/devflow-pm off`）。
+
 ## 公开模板边界
 
 公开模板可以包含：
