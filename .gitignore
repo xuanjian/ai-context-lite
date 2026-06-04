@@ -57,3 +57,4 @@ apps/panel/.vite/
 .vscode/
 *.swp
 *.tmp
+.claude
